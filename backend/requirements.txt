@@ -1,0 +1,12 @@
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+sqlalchemy==2.0.37
+psycopg2-binary==2.9.10
+python-dotenv==1.0.1
+requests==2.32.3
+celery[redis]==5.4.0
+redis==5.2.1
+pydantic==2.10.5
+pydantic-settings==2.7.1
+scrapy==2.12.0
+playwright==1.49.1

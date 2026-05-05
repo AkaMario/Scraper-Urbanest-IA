@@ -1,0 +1,156 @@
+x-backend-env: &backend-env
+  DATABASE_URL: ${DATABASE_URL:-postgresql://urbanest:urbanest@postgres:5432/urbanest}
+  REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+  OLLAMA_URL: ${OLLAMA_URL:-http://ollama:11434}
+  OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:1.5b}
+  OLLAMA_NUM_THREAD: ${OLLAMA_NUM_THREAD:-4}
+  OLLAMA_NUM_CTX: ${OLLAMA_NUM_CTX:-2048}
+  ENABLE_OLLAMA_CHAT: ${ENABLE_OLLAMA_CHAT:-false}
+  ENABLE_OLLAMA_SEARCH_SUMMARIES: ${ENABLE_OLLAMA_SEARCH_SUMMARIES:-false}
+  SCRAPING_DELAY_SECONDS: ${SCRAPING_DELAY_SECONDS:-2}
+  ENABLE_LIVE_SCRAPING: ${ENABLE_LIVE_SCRAPING:-false}
+  ENABLE_WEB_CONTEXT: ${ENABLE_WEB_CONTEXT:-true}
+  ENABLE_GENERAL_WEB_SEARCH: ${ENABLE_GENERAL_WEB_SEARCH:-true}
+  WEB_SEARCH_MAX_RESULTS: ${WEB_SEARCH_MAX_RESULTS:-4}
+  ALLOWED_WEB_DOMAINS: ${ALLOWED_WEB_DOMAINS:-fincaraiz.com.co,metrocuadrado.com,olx.com.co,facebook.com}
+  PYTHONPATH: /app:/app/backend
+
+x-backend-service: &backend-service
+  image: urbanest-backend:dev
+  build:
+    context: .
+    dockerfile: backend/Dockerfile
+  working_dir: /app/backend
+  environment:
+    <<: *backend-env
+  restart: unless-stopped
+  develop:
+    watch:
+      - action: sync+restart
+        path: ./backend
+        target: /app/backend
+      - action: sync+restart
+        path: ./scraper
+        target: /app/scraper
+      - action: rebuild
+        path: ./backend/requirements.txt
+
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    working_dir: /app/frontend
+    command: npm run dev -- --host 0.0.0.0 --port ${FRONTEND_PORT:-5173}
+    environment:
+      VITE_API_URL: http://localhost:${BACKEND_PORT:-8000}
+      CHOKIDAR_USEPOLLING: "true"
+      CHOKIDAR_INTERVAL: "300"
+    depends_on:
+      backend:
+        condition: service_started
+    ports:
+      - "${FRONTEND_PORT:-5173}:5173"
+    restart: unless-stopped
+    develop:
+      watch:
+        - action: sync
+          path: ./frontend/src
+          target: /app/frontend/src
+        - action: sync
+          path: ./frontend/index.html
+          target: /app/frontend/index.html
+        - action: sync
+          path: ./frontend/vite.config.js
+          target: /app/frontend/vite.config.js
+        - action: sync
+          path: ./frontend/tailwind.config.js
+          target: /app/frontend/tailwind.config.js
+        - action: sync
+          path: ./frontend/postcss.config.js
+          target: /app/frontend/postcss.config.js
+        - action: rebuild
+          path: ./frontend/package.json
+
+  backend:
+    <<: *backend-service
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+
+  celery_worker:
+    <<: *backend-service
+    command: celery -A app.tasks.celery_app.celery worker --loglevel=info --concurrency=2 --without-gossip --without-mingle
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_started
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: urbanest
+      POSTGRES_USER: urbanest
+      POSTGRES_PASSWORD: urbanest
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U urbanest -d urbanest"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --save '' --appendonly no
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    environment:
+      OLLAMA_NUM_PARALLEL: ${OLLAMA_NUM_PARALLEL:-1}
+      OLLAMA_MAX_LOADED_MODELS: ${OLLAMA_MAX_LOADED_MODELS:-1}
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    restart: unless-stopped
+
+  scraper:
+    build:
+      context: .
+      dockerfile: scraper/Dockerfile
+    working_dir: /app
+    command: sh -c "sleep infinity"
+    volumes:
+      - ./scraper:/app/scraper
+      - ./backend:/app/backend
+    environment:
+      PYTHONPATH: /app:/app/backend
+    profiles:
+      - tools
+
+volumes:
+  postgres_data:
+  ollama_data:
