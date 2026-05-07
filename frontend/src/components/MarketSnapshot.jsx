@@ -15,9 +15,13 @@ function buildSearchLine(parsedQuery) {
     return "Aun no hay una busqueda activa.";
   }
 
+  const requestedZone = parsedQuery.zone || parsedQuery.neighborhood;
+  const scope = requestedZone
+    ? `${parsedQuery.city || "Cartagena"} completa · referencia: ${requestedZone}`
+    : parsedQuery.city || "Cartagena";
   const fragments = [
     parsedQuery.property_type || "inmuebles",
-    parsedQuery.zone || parsedQuery.neighborhood || "Cartagena",
+    scope,
   ];
 
   if (parsedQuery.bedrooms) {
@@ -57,6 +61,10 @@ function InsightPill({ children }) {
 function MarketSnapshot({ parsedQuery, analysis, results, loading, compact = false }) {
   const resultCount = results?.length || analysis?.total_results || 0;
   const opportunity = analysis?.opportunities?.[0];
+  const requestedZone = parsedQuery?.zone || parsedQuery?.neighborhood;
+  const scopeLabel = requestedZone
+    ? `${parsedQuery?.city || "Cartagena"} completa`
+    : parsedQuery?.city || "Cartagena";
 
   return (
     <section className="overflow-hidden rounded-[24px] border border-white/10 bg-[radial-gradient(circle_at_top_left,_rgba(16,185,129,0.16),_transparent_34%),linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.02))] sm:rounded-[30px]">
@@ -103,7 +111,7 @@ function MarketSnapshot({ parsedQuery, analysis, results, loading, compact = fal
                 ? "Todavia no hay lectura final porque sigo esperando anuncios y precios comparables."
                 : resultCount === 0
                   ? "Cuando llegue un lote de inmuebles te mostraré aqui el tono del mercado, dispersion de precios y oportunidades claras."
-                  : `Estoy viendo ${resultCount} resultado(s) para ${parsedQuery?.zone || parsedQuery?.neighborhood || "la zona consultada"}. El mercado se mueve entre ${formatCurrency(analysis?.min_price)} y ${formatCurrency(analysis?.max_price)}, con una referencia central de ${formatCurrency(analysis?.average_price)}.`}
+                  : `Estoy viendo ${resultCount} resultado(s) para ${scopeLabel}. El mercado se mueve entre ${formatCurrency(analysis?.min_price)} y ${formatCurrency(analysis?.max_price)}, con una referencia central de ${formatCurrency(analysis?.average_price)}.`}
             </p>
           </div>
 

@@ -106,8 +106,6 @@ def _serialize_next_data_item(item: dict, response, query: dict) -> dict | None:
     zone = (
         _first_location_name(locations, "neighbourhood")
         or location_main.get("name")
-        or query.get("zone")
-        or query.get("neighborhood")
     )
     image_url = item.get("img")
     if not image_url and item.get("images"):
@@ -151,8 +149,8 @@ def _extract_visible_card_items(response, query: dict):
             "title": title or location or "Inmueble en arriendo",
             "description": location or title or "Inmueble publicado en FincaRaiz.",
             "city": query.get("city", "Cartagena"),
-            "zone": query.get("zone") or query.get("neighborhood"),
-            "neighborhood": query.get("zone") or query.get("neighborhood"),
+            "zone": None,
+            "neighborhood": None,
             "property_type": "apartamento" if "apartamento" in href else "casa",
             "price_text": price,
             "bedrooms": _to_int(_match_first(r"(\d+)\s*(?:hab|habitacion)", typology_text.lower())),

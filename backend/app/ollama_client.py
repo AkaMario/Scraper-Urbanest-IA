@@ -320,7 +320,13 @@ def build_search_reply(
     safe_query = parsed_query or {}
     safe_analysis = analysis or {}
     safe_properties = properties or []
-    zone = safe_query.get("zone") or safe_query.get("neighborhood") or "distintas zonas de Cartagena"
+    requested_zone = safe_query.get("zone") or safe_query.get("neighborhood")
+    city_scope = safe_query.get("city") or "Cartagena"
+    zone = (
+        f"{city_scope} completa, tomando {requested_zone} solo como referencia"
+        if requested_zone
+        else f"distintas zonas de {city_scope}"
+    )
     property_type = safe_query.get("property_type") or "inmuebles"
     total = len(safe_properties)
 
@@ -338,7 +344,8 @@ def build_search_reply(
     if not total:
         return (
             f"No encontré {property_type} que encajen bien con el presupuesto y criterios actuales para {zone}. "
-            "Si quieres, puedo ampliar el rango, cambiar el tipo de inmueble o priorizar barrios más económicos."
+            "La busqueda se hizo sin cerrar el resultado a un solo barrio. "
+            "Si quieres, puedo ampliar el rango, cambiar el tipo de inmueble o bajar algun criterio."
         )
 
     average_price = safe_analysis.get("average_price")

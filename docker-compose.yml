@@ -21,6 +21,9 @@ x-backend-service: &backend-service
     context: .
     dockerfile: backend/Dockerfile
   working_dir: /app/backend
+  volumes:
+    - ./backend:/app/backend
+    - ./scraper:/app/scraper
   environment:
     <<: *backend-env
   restart: unless-stopped
@@ -49,6 +52,9 @@ services:
     depends_on:
       backend:
         condition: service_started
+    volumes:
+      - ./frontend:/app/frontend
+      - frontend_node_modules:/app/frontend/node_modules
     ports:
       - "${FRONTEND_PORT:-5173}:5173"
     restart: unless-stopped
@@ -74,7 +80,7 @@ services:
 
   backend:
     <<: *backend-service
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app/backend --reload-dir /app/scraper
     depends_on:
       postgres:
         condition: service_healthy
@@ -87,7 +93,7 @@ services:
 
   celery_worker:
     <<: *backend-service
-    command: celery -A app.tasks.celery_app.celery worker --loglevel=info --concurrency=2 --without-gossip --without-mingle
+    command: watchfiles "celery -A app.tasks.celery_app.celery worker --loglevel=info --concurrency=2 --without-gossip --without-mingle" /app/backend /app/scraper
     depends_on:
       postgres:
         condition: service_healthy
@@ -154,3 +160,4 @@ services:
 volumes:
   postgres_data:
   ollama_data:
+  frontend_node_modules:

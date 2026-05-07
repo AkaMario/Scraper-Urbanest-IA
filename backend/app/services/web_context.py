@@ -213,7 +213,7 @@ def build_function_answer() -> str:
         "El flujo es así: primero interpreto tu mensaje como criterios de búsqueda; luego el backend consulta "
         "fuentes permitidas mediante scrapers propios: FincaRaiz, Metrocuadrado y OLX. "
         "Facebook Marketplace no se consulta automáticamente porque no automatizamos login ni evasión. "
-        "Después normalizo los anuncios, filtro por zona, precio, habitaciones y baños, guardo el lote y le paso a Ollama "
+        "Después normalizo los anuncios, filtro por ciudad, precio, habitaciones y baños, guardo el lote y le paso a Ollama "
         "solo el contexto aprobado para que responda, compare y explique. Para preguntas generales, el backend también "
         "puede hacer búsqueda web y pasarle esos resultados a Ollama como contexto. "
         "Si una fuente real no responde o el scraping está desactivado, devuelvo cero resultados en vez de inventar anuncios."

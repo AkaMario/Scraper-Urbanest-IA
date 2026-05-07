@@ -13,8 +13,8 @@ class OlxSpider(scrapy.Spider):
         self.query = json.loads(query_json)
 
     def start_requests(self):
-        zone = quote_plus(self.query.get("zone") or "cartagena")
-        url = f"https://www.olx.com.co/inmuebles_c378/{zone}"
+        city = quote_plus((self.query.get("city") or "cartagena").lower())
+        url = f"https://www.olx.com.co/inmuebles_c378/{city}"
         yield scrapy.Request(url, callback=self.parse, dont_filter=True)
 
     def parse(self, response):
@@ -27,7 +27,7 @@ class OlxSpider(scrapy.Spider):
                 "title": title or "Inmueble OLX",
                 "description": " ".join(card.css("span *::text").getall()).strip(),
                 "city": self.query.get("city", "Cartagena"),
-                "zone": self.query.get("zone"),
+                "zone": None,
                 "price_text": " ".join(card.css("p *::text").getall()).strip(),
                 "bedrooms": None,
                 "bathrooms": None,

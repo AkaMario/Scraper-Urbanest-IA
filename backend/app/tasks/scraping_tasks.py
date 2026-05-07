@@ -75,8 +75,6 @@ def get_job_results(db, job_id: int) -> list[Property]:
     query = db.get(SearchQuery, job.query_id)
     parsed_query = (query.parsed_query_json if query else {}) or {}
     stmt = select(Property).where(func.lower(Property.city) == parsed_query.get("city", "Cartagena").lower())
-    if parsed_query.get("zone"):
-        stmt = stmt.where(func.lower(Property.zone) == parsed_query["zone"].lower())
     if parsed_query.get("property_type"):
         stmt = stmt.where(func.lower(Property.property_type) == parsed_query["property_type"].lower())
     stmt = stmt.where(~Property.source.ilike("%Mock%"))

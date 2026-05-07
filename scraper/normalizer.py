@@ -53,12 +53,9 @@ def normalize_property_type(property_type: str | None) -> str | None:
 
 def build_fincaraiz_search_url(query: dict) -> str:
     city = _url_slug(query.get("city") or "Cartagena")
-    zone = _url_slug(query.get("zone") or query.get("neighborhood") or "")
     property_segment = _fincaraiz_property_segment(query.get("property_type"))
     path_parts = ["https://www.fincaraiz.com.co", "arriendo", property_segment]
 
-    if zone:
-        path_parts.append(zone)
     path_parts.append(city)
 
     if query.get("price_min"):
@@ -71,19 +68,17 @@ def build_fincaraiz_search_url(query: dict) -> str:
 
 def build_source_search_url(source: str, query: dict) -> str:
     city = (query.get("city") or "Cartagena").strip()
-    zone = (query.get("zone") or city).strip()
-    city_slug = quote_plus(city)
-    zone_slug = quote_plus(zone)
+    city_slug = quote_plus(city.lower())
     source_key = source.lower()
 
     if "finca" in source_key:
         return build_fincaraiz_search_url(query)
     if "metro" in source_key:
-        return f"https://www.metrocuadrado.com/arriendo/cartagena/{zone_slug}/"
+        return f"https://www.metrocuadrado.com/arriendo/{city_slug}/"
     if "olx" in source_key:
-        return f"https://www.olx.com.co/inmuebles_c378/{zone_slug.lower()}"
+        return f"https://www.olx.com.co/inmuebles_c378/{city_slug.lower()}"
     if "facebook" in source_key:
-        return f"https://www.facebook.com/marketplace/cartagena/search/?query={quote_plus(f'arriendo {zone} cartagena')}"
+        return f"https://www.facebook.com/marketplace/cartagena/search/?query={quote_plus(f'arriendo {city}')}"
     return build_fincaraiz_search_url(query)
 
 
@@ -98,7 +93,7 @@ def _price_from_text(price_text: str | None, fallback: int) -> int:
 
 def normalize_property(item: dict, query: dict) -> dict:
     default_price = int(query.get("price_max") or query.get("price_min") or 2_000_000)
-    zone = item.get("zone") or query.get("zone") or "Cartagena"
+    zone = item.get("zone") or item.get("neighborhood") or "Cartagena"
     property_type = normalize_property_type(item.get("property_type") or query.get("property_type")) or "apartamento"
     return {
         "title": item.get("title") or f"Inmueble en {zone}",
@@ -120,14 +115,6 @@ def normalize_property(item: dict, query: dict) -> dict:
 
 
 def property_matches_query(property_item: dict, query: dict) -> bool:
-    requested_zone = (query.get("zone") or query.get("neighborhood") or "").strip().lower()
-    if requested_zone:
-        haystack = " ".join(
-            str(property_item.get(field) or "")
-            for field in ("zone", "neighborhood", "title", "description")
-        ).lower()
-        if requested_zone not in haystack:
-            return False
     if query.get("price_min") and property_item.get("price") and property_item["price"] < int(query["price_min"]):
         return False
     if query.get("price_max") and property_item.get("price") and property_item["price"] > int(query["price_max"]):

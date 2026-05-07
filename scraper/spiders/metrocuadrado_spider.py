@@ -14,8 +14,8 @@ class MetroCuadradoSpider(scrapy.Spider):
         self.query = json.loads(query_json)
 
     def start_requests(self):
-        zone = quote_plus(self.query.get("zone") or "Cartagena")
-        url = f"https://www.metrocuadrado.com/arriendo/cartagena/{zone}/"
+        city = quote_plus((self.query.get("city") or "Cartagena").lower())
+        url = f"https://www.metrocuadrado.com/arriendo/{city}/"
         yield scrapy.Request(url, callback=self.parse, dont_filter=True)
 
     def parse(self, response):
@@ -34,8 +34,8 @@ class MetroCuadradoSpider(scrapy.Spider):
                     "title": item.get("title") or "Inmueble en arriendo",
                     "description": item.get("sector") or item.get("subtitle") or item.get("title"),
                     "city": self.query.get("city", "Cartagena"),
-                    "zone": item.get("mnombrecomunbarrio") or item.get("mbarrio") or self.query.get("zone"),
-                    "neighborhood": item.get("mnombrecomunbarrio") or item.get("mbarrio") or self.query.get("zone"),
+                    "zone": item.get("mnombrecomunbarrio") or item.get("mbarrio"),
+                    "neighborhood": item.get("mnombrecomunbarrio") or item.get("mbarrio"),
                     "property_type": (item.get("mtipoinmueble") or {}).get("nombre"),
                     "price": item.get("mvalorarriendo") or item.get("mvalorventa"),
                     "bedrooms": _to_int(item.get("mnrocuartos")),
@@ -54,7 +54,7 @@ class MetroCuadradoSpider(scrapy.Spider):
                 "title": title or "Inmueble en arriendo",
                 "description": " ".join(card.css("p *::text").getall()).strip(),
                 "city": self.query.get("city", "Cartagena"),
-                "zone": self.query.get("zone"),
+                "zone": None,
                 "price_text": "".join(card.css("span *::text").getall()).strip(),
                 "bedrooms": None,
                 "bathrooms": None,
