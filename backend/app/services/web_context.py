@@ -42,6 +42,10 @@ FUNCTION_QUESTION_HINTS = [
     "scraper",
     "scrapers",
     "ollama",
+    "modelo",
+    "model",
+    "llm",
+    "ia",
     "internet",
     "informacion",
     "información",
@@ -209,6 +213,7 @@ def build_web_search_answer(results: list[dict[str, str]]) -> str:
 
 def build_function_answer() -> str:
     return (
+        f"Modelo Ollama configurado actualmente: {settings.ollama_model}. "
         "Busco la información desde el backend, no directamente desde Ollama. "
         "El flujo es así: primero interpreto tu mensaje como criterios de búsqueda; luego el backend consulta "
         "fuentes permitidas mediante scrapers propios: FincaRaiz, Metrocuadrado y OLX. "
@@ -255,7 +260,10 @@ def build_web_context(
     properties: list[dict[str, Any]] | None = None,
     web_results: list[dict[str, str]] | None = None,
 ) -> str:
-    context_blocks = [SYSTEM_CONTEXT]
+    context_blocks = [
+        SYSTEM_CONTEXT,
+        f"Modelo Ollama configurado para responder: {settings.ollama_model}.",
+    ]
 
     if should_search_web(message):
         results = web_results if web_results is not None else search_web(message)

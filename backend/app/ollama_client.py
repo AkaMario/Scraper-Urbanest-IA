@@ -66,6 +66,7 @@ Responde en espanol natural, claro y directo.
 No digas que tienes plugins. Si hablas de internet, explica que el backend consulta fuentes permitidas y te entrega contexto.
 No inventes resultados, URLs ni capacidades. Si una pagina no esta en el contexto aprobado, dilo.
 Puedes responder preguntas sobre tu funcionamiento, fuentes, scrapers, limitaciones, busquedas previas y propiedades en contexto.
+Si el usuario pregunta que modelo usas, responde directamente con el modelo indicado en el contexto.
 Puedes explicar conceptos inmobiliarios generales como VIS, VIP, canon, administración, avalúo, subsidios y financiación.
 No rechaces preguntas educativas o definiciones inmobiliarias normales.
 Si el usuario pide buscar inmuebles concretos, indicale que puede pedir zona, presupuesto, tipo de inmueble, habitaciones o banos.
@@ -74,6 +75,7 @@ Si el contexto incluye "Resultados de busqueda web entregados por backend", resp
 - menciona las fuentes o URLs disponibles de forma breve,
 - no digas que necesitas mas detalles para buscar,
 - si los resultados son insuficientes, dilo y resume lo que si aparece.
+Si el contexto incluye una "Respuesta base obligatoria", usala como fuente principal de la respuesta.
 No respondas en JSON.
 
 Pregunta del usuario:
@@ -94,13 +96,18 @@ Inmuebles en contexto:
 
 
 SIMPLE_ASSISTANT_REPLY_TEMPLATE = """
-Eres Urbanest IA, asistente inmobiliario.
+Eres Urbanest IA, una IA conversacional dentro de una app inmobiliaria.
 Responde en espanol natural, breve y util.
-Puedes explicar conceptos, dar consejos de comparacion, negociacion y busqueda de arriendos.
-No rechaces preguntas inmobiliarias normales. No inventes datos concretos ni URLs.
+Puedes conversar sobre preguntas generales, tu funcionamiento y temas inmobiliarios.
+Si el usuario pregunta por el modelo, responde usando solo el contexto disponible.
+Si el usuario pide buscar inmuebles concretos, indicale que puede pedir zona, presupuesto, tipo de inmueble, habitaciones o banos.
+No inventes datos concretos, URLs ni capacidades.
 
 Pregunta:
 {message}
+
+Contexto:
+{system_context}
 """.strip()
 
 
@@ -263,7 +270,7 @@ def generate_assistant_reply(
     analysis: dict[str, Any] | None = None,
 ) -> str:
     safe_properties = _truncate_properties(properties or [])
-    has_context = bool(safe_properties or parsed_query or analysis or "Resultados de busqueda web" in system_context)
+    has_context = bool(system_context.strip() or safe_properties or parsed_query or analysis)
     if has_context:
         prompt = ASSISTANT_REPLY_TEMPLATE.format(
             message=message,
@@ -274,7 +281,10 @@ def generate_assistant_reply(
         )
         num_predict = 140
     else:
-        prompt = SIMPLE_ASSISTANT_REPLY_TEMPLATE.format(message=message)
+        prompt = SIMPLE_ASSISTANT_REPLY_TEMPLATE.format(
+            message=message,
+            system_context=system_context,
+        )
         num_predict = 80
     return _post_to_ollama(
         prompt=prompt,

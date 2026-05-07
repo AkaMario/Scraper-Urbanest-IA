@@ -5,9 +5,7 @@ from app.database import get_db
 from app.models import ScrapingJob, SearchQuery
 from app.schemas import ChatRequest, ChatResponse
 from app.ollama_client import generate_assistant_reply
-from app.config import settings
 from app.services.domain_knowledge import (
-    build_fast_real_estate_reply,
     build_real_estate_concept_answer,
     is_real_estate_concept_question,
 )
@@ -101,27 +99,14 @@ def chat(request: ChatRequest, db: Session = Depends(get_db)):
         function_answer = build_function_answer() if is_function_question(request.message) and not should_search_web(request.message) else None
         web_requested = should_search_web(request.message)
         web_results = search_web(request.message) if web_requested else []
-        if web_requested:
-            return ChatResponse(
-                reply=build_web_search_answer(web_results),
-                parsed_query=request.parsed_query,
-                results=[],
-                job_id=None,
-            )
-        if not settings.enable_ollama_chat and not properties_context:
-            return ChatResponse(
-                reply=build_fast_real_estate_reply(request.message),
-                parsed_query=request.parsed_query,
-                results=[],
-                job_id=None,
-            )
         try:
             system_context = build_web_context(request.message, properties_context, web_results=web_results)
             if function_answer:
                 system_context = (
-                    f"{system_context}\n\n"
                     "Respuesta base obligatoria para esta pregunta de funcionamiento:\n"
-                    f"{function_answer}"
+                    f"{function_answer}\n\n"
+                    "Contexto adicional:\n"
+                    f"{system_context}"
                 )
             reply = generate_assistant_reply(
                 request.message,
