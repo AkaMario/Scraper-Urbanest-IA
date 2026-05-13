@@ -32,10 +32,10 @@ function ChatComposer({ onSend, onTyping, loading }) {
   return (
     <div className="sticky bottom-0 border-t border-white/5 bg-gradient-to-t from-[#343541] via-[#343541] to-[#343541]/60 px-3 pb-4 pt-3 sm:px-6 sm:pb-6 sm:pt-4">
       <form onSubmit={handleSubmit} className="mx-auto max-w-3xl">
-        <div className="rounded-[22px] border border-white/10 bg-[#40414f] p-2.5 shadow-[0_18px_40px_rgba(0,0,0,0.3)] sm:rounded-[30px] sm:p-3">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:gap-3">
+        <div className="rounded-[22px] border border-white/10 bg-[#40414f] p-2.5 sm:rounded-[30px] sm:p-3">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3 items-center">
             <textarea
-              className="min-h-[72px] flex-1 resize-none bg-transparent px-3 py-2 text-sm leading-6 text-white outline-none placeholder:text-slate-400 sm:min-h-[64px] sm:text-[15px]"
+              className="flex-1 bg-transparent px-3 pt-4 text-sm text-white outline-none placeholder:text-slate-400 sm:text-[15px] resize-none h-10 sm:h-12 max-h-40"
               value={input}
               onChange={(event) => updateTyping(event.target.value)}
               onKeyDown={handleKeyDown}
