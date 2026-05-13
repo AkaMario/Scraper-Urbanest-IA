@@ -115,7 +115,7 @@ def chat(request: ChatRequest, db: Session = Depends(get_db)):
                 parsed_query=parsed_query_context,
                 analysis=analysis_context,
             )
-            if function_answer and not any(source in reply.lower() for source in ("fincaraiz", "metrocuadrado", "olx", "backend")):
+            if function_answer and not any(source in reply.lower() for source in ("fincaraiz", "metrocuadrado", "backend")):
                 reply = function_answer
             if web_requested and _is_unhelpful_refusal(reply):
                 reply = build_web_search_answer(web_results)

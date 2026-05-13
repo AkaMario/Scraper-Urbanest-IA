@@ -332,11 +332,7 @@ def build_search_reply(
     safe_properties = properties or []
     requested_zone = safe_query.get("zone") or safe_query.get("neighborhood")
     city_scope = safe_query.get("city") or "Cartagena"
-    zone = (
-        f"{city_scope} completa, tomando {requested_zone} solo como referencia"
-        if requested_zone
-        else f"distintas zonas de {city_scope}"
-    )
+    zone = requested_zone or f"distintas zonas de {city_scope}"
     property_type = safe_query.get("property_type") or "inmuebles"
     total = len(safe_properties)
 

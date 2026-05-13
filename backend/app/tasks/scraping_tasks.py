@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 
 from app.database import SessionLocal
 from app.models import Property, ScrapingJob, SearchQuery
@@ -9,6 +9,22 @@ from app.services.query_parser import parse_user_query
 from scraper.normalizer import normalize_property, property_matches_query, run_property_search
 
 from .celery_app import celery
+
+
+ACTIVE_PROPERTY_SOURCES = ("FincaRaiz", "Metrocuadrado")
+
+
+def _zone_like(value: str) -> str:
+    return f"%{value.strip().lower()}%"
+
+
+def _selected_sources(parsed_query: dict) -> tuple[str, ...]:
+    requested = tuple(
+        source
+        for source in parsed_query.get("sources") or ACTIVE_PROPERTY_SOURCES
+        if source in ACTIVE_PROPERTY_SOURCES
+    )
+    return requested or ACTIVE_PROPERTY_SOURCES
 
 
 @celery.task(name="app.tasks.scraping_tasks.process_search_request")
@@ -75,9 +91,31 @@ def get_job_results(db, job_id: int) -> list[Property]:
     query = db.get(SearchQuery, job.query_id)
     parsed_query = (query.parsed_query_json if query else {}) or {}
     stmt = select(Property).where(func.lower(Property.city) == parsed_query.get("city", "Cartagena").lower())
+    if parsed_query.get("zone") or parsed_query.get("neighborhood"):
+        requested_zone = _zone_like(parsed_query.get("zone") or parsed_query.get("neighborhood"))
+        unknown_zone = or_(Property.zone.is_(None), func.lower(Property.zone).in_(["", "cartagena"]))
+        unknown_neighborhood = or_(
+            Property.neighborhood.is_(None),
+            func.lower(Property.neighborhood).in_(["", "cartagena"]),
+        )
+        stmt = stmt.where(
+            or_(
+                func.lower(Property.zone).like(requested_zone),
+                func.lower(Property.neighborhood).like(requested_zone),
+                and_(
+                    unknown_zone,
+                    unknown_neighborhood,
+                    or_(
+                        func.lower(Property.title).like(requested_zone),
+                        func.lower(Property.description).like(requested_zone),
+                        func.lower(Property.url).like(requested_zone),
+                    ),
+                ),
+            )
+        )
     if parsed_query.get("property_type"):
         stmt = stmt.where(func.lower(Property.property_type) == parsed_query["property_type"].lower())
-    stmt = stmt.where(~Property.source.ilike("%Mock%"))
+    stmt = stmt.where(Property.source.in_(_selected_sources(parsed_query)))
     if job.started_at:
         stmt = stmt.where(Property.scraped_at >= job.started_at)
     if job.finished_at:

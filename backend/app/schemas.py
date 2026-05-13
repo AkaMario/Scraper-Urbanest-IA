@@ -23,6 +23,7 @@ class ParsedQuery(BaseModel):
     bedrooms: int | None = None
     bathrooms: int | None = None
     keywords: list[str] = Field(default_factory=list)
+    sources: list[str] = Field(default_factory=list)
 
 
 class PropertyOut(BaseModel):

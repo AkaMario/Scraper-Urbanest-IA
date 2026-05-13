@@ -15,7 +15,8 @@ class MetroCuadradoSpider(scrapy.Spider):
 
     def start_requests(self):
         city = quote_plus((self.query.get("city") or "Cartagena").lower())
-        url = f"https://www.metrocuadrado.com/arriendo/{city}/"
+        zone = quote_plus((self.query.get("zone") or self.query.get("neighborhood") or "").lower())
+        url = f"https://www.metrocuadrado.com/arriendo/{city}/{zone}/" if zone else f"https://www.metrocuadrado.com/arriendo/{city}/"
         yield scrapy.Request(url, callback=self.parse, dont_filter=True)
 
     def parse(self, response):

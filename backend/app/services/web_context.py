@@ -13,12 +13,12 @@ from app.config import settings
 SYSTEM_CONTEXT = """
 Urbanest IA es un asistente inmobiliario local para arriendos en Cartagena.
 El backend decide que puede consultar la IA: Ollama no navega por internet por su cuenta.
-Para busquedas de inmuebles, el backend usa scrapers propios y fuentes permitidas.
+Para busquedas de inmuebles, el backend usa scrapers propios y fuentes permitidas. En este momento las fuentes activas son FincaRaiz y Metrocuadrado.
 Para preguntas generales o actuales, el backend puede hacer busqueda web y entregarle extractos a Ollama como contexto.
 Fuentes configuradas:
 - FincaRaiz: spider Scrapy fincaraiz.
 - Metrocuadrado: spider Scrapy metrocuadrado.
-- OLX Colombia: spider Scrapy olx.
+- OLX Colombia: spider disponible, pero no activo en el rastreo automatico actual.
 - Facebook Marketplace: no se consulta automaticamente porque requiere login y no se automatiza evasion.
 Si el scraping real falla, esta desactivado o una fuente no entrega datos utilizables, el sistema devuelve cero resultados en vez de inventar anuncios.
 El backend respeta la configuracion ENABLE_LIVE_SCRAPING, delays y evita automatizar logins, captchas o evasiones.
@@ -216,7 +216,7 @@ def build_function_answer() -> str:
         f"Modelo Ollama configurado actualmente: {settings.ollama_model}. "
         "Busco la información desde el backend, no directamente desde Ollama. "
         "El flujo es así: primero interpreto tu mensaje como criterios de búsqueda; luego el backend consulta "
-        "fuentes permitidas mediante scrapers propios: FincaRaiz, Metrocuadrado y OLX. "
+        "fuentes permitidas mediante scrapers propios: FincaRaiz y Metrocuadrado. "
         "Facebook Marketplace no se consulta automáticamente porque no automatizamos login ni evasión. "
         "Después normalizo los anuncios, filtro por ciudad, precio, habitaciones y baños, guardo el lote y le paso a Ollama "
         "solo el contexto aprobado para que responda, compare y explique. Para preguntas generales, el backend también "

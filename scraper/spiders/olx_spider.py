@@ -14,7 +14,8 @@ class OlxSpider(scrapy.Spider):
 
     def start_requests(self):
         city = quote_plus((self.query.get("city") or "cartagena").lower())
-        url = f"https://www.olx.com.co/inmuebles_c378/{city}"
+        zone = quote_plus((self.query.get("zone") or self.query.get("neighborhood") or "").lower())
+        url = f"https://www.olx.com.co/inmuebles_c378/{zone or city}"
         yield scrapy.Request(url, callback=self.parse, dont_filter=True)
 
     def parse(self, response):

@@ -29,6 +29,14 @@ PROPERTY_TYPES = {
     "local": "local",
 }
 
+SOURCE_ALIASES = {
+    "finca raiz": "FincaRaiz",
+    "finca raíz": "FincaRaiz",
+    "fincaraiz": "FincaRaiz",
+    "metrocuadrado": "Metrocuadrado",
+    "metro cuadrado": "Metrocuadrado",
+}
+
 SEARCH_HINTS = [
     "busca",
     "buscar",
@@ -101,6 +109,8 @@ def _extract_price_values(message: str) -> list[int]:
         .replace("millones.", "millon")
     )
     values: list[int] = []
+    for first, second in re.findall(r"(?:entre|de)\s*(\d+(?:\.\d+)?)\s*(?:y|a|-)\s*(\d+(?:\.\d+)?)\s*millon", normalized):
+        values.extend([int(float(first) * 1_000_000), int(float(second) * 1_000_000)])
     for match in re.findall(r"(\d+(?:\.\d+)?)\s*millon", normalized):
         values.append(int(float(match) * 1_000_000))
     for match in re.findall(r"(\d+(?:\.\d+)?)\s*mil\b", normalized):
@@ -128,6 +138,22 @@ def _extract_property_type(message: str) -> str | None:
         (normalized for token, normalized in PROPERTY_TYPES.items() if _contains_term(message, token)),
         None,
     )
+
+
+def _extract_sources(message: str) -> list[str]:
+    lowered = message.lower()
+    sources = []
+    for alias, source in SOURCE_ALIASES.items():
+        if alias in lowered and source not in sources:
+            sources.append(source)
+    return sources
+
+
+def _looks_like_source_location(value: Any) -> bool:
+    normalized = str(value or "").lower()
+    if not normalized.strip():
+        return False
+    return any(alias in normalized for alias in SOURCE_ALIASES)
 
 
 def fallback_parse_query(message: str) -> dict[str, Any]:
@@ -167,6 +193,7 @@ def fallback_parse_query(message: str) -> dict[str, Any]:
         "bedrooms": bedrooms,
         "bathrooms": bathrooms,
         "keywords": keywords,
+        "sources": _extract_sources(lowered),
     }
 
 
@@ -176,6 +203,8 @@ def should_skip_ollama_for_query(message: str, fallback_payload: dict[str, Any])
         return True
 
     extracted_signals = [
+        fallback_payload.get("property_type") if _extract_property_type(lowered) else None,
+        fallback_payload.get("sources"),
         fallback_payload.get("zone"),
         fallback_payload.get("price_min"),
         fallback_payload.get("price_max"),
@@ -192,10 +221,33 @@ def normalize_query_payload(payload: dict[str, Any]) -> dict[str, Any]:
     normalized = fallback_parse_query("")
     normalized.update({key: value for key, value in payload.items() if key in normalized})
     normalized["city"] = normalized.get("city") or "Cartagena"
+    if _looks_like_source_location(normalized.get("zone")):
+        normalized["zone"] = None
+    if _looks_like_source_location(normalized.get("neighborhood")):
+        normalized["neighborhood"] = None
     if normalized.get("zone") and not normalized.get("neighborhood"):
         normalized["neighborhood"] = normalized["zone"]
     keywords = normalized.get("keywords") or []
     normalized["keywords"] = [str(keyword).strip() for keyword in keywords if str(keyword).strip()]
+    normalized["sources"] = [str(source).strip() for source in normalized.get("sources") or [] if str(source).strip()]
+    return normalized
+
+
+def apply_message_overrides(payload: dict[str, Any], message: str, fallback_payload: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(payload)
+    sources = _extract_sources(message)
+    if sources:
+        normalized["sources"] = sources
+    if _looks_like_source_location(normalized.get("zone")):
+        normalized["zone"] = None
+    if _looks_like_source_location(normalized.get("neighborhood")):
+        normalized["neighborhood"] = None
+
+    lowered = message.lower()
+    if fallback_payload.get("bedrooms") is None and not re.search(r"\d+\s*(habitacion|habitaciones|alcoba|alcobas)", lowered):
+        normalized["bedrooms"] = None
+    if fallback_payload.get("bathrooms") is None and not re.search(r"\d+\s*(baño|baños|bano|banos)", lowered):
+        normalized["bathrooms"] = None
     return normalized
 
 
@@ -261,6 +313,7 @@ def parse_user_query(message: str) -> tuple[dict[str, Any], str]:
 
     try:
         ollama_payload = parse_query_with_ollama(message)
-        return normalize_query_payload(ollama_payload), "ollama"
+        normalized_payload = normalize_query_payload(ollama_payload)
+        return apply_message_overrides(normalized_payload, message, fallback_payload), "ollama"
     except Exception:
-        return fallback_payload, "fallback"
+        return apply_message_overrides(fallback_payload, message, fallback_payload), "fallback"

@@ -29,6 +29,21 @@ def _url_slug(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", slug).strip("-")
 
 
+def _search_text(value: str | None) -> str:
+    normalized = (value or "").strip().lower()
+    replacements = {
+        "á": "a",
+        "é": "e",
+        "í": "i",
+        "ó": "o",
+        "ú": "u",
+        "ñ": "n",
+    }
+    for original, replacement in replacements.items():
+        normalized = normalized.replace(original, replacement)
+    return re.sub(r"[^a-z0-9]+", " ", normalized).strip()
+
+
 def _fincaraiz_property_segment(property_type: str | None) -> str:
     normalized = (property_type or "").strip().lower()
     if normalized in {"casa", "casas"}:
@@ -53,9 +68,12 @@ def normalize_property_type(property_type: str | None) -> str | None:
 
 def build_fincaraiz_search_url(query: dict) -> str:
     city = _url_slug(query.get("city") or "Cartagena")
+    zone = _url_slug(query.get("zone") or query.get("neighborhood") or "")
     property_segment = _fincaraiz_property_segment(query.get("property_type"))
     path_parts = ["https://www.fincaraiz.com.co", "arriendo", property_segment]
 
+    if zone:
+        path_parts.append(zone)
     path_parts.append(city)
 
     if query.get("price_min"):
@@ -68,17 +86,24 @@ def build_fincaraiz_search_url(query: dict) -> str:
 
 def build_source_search_url(source: str, query: dict) -> str:
     city = (query.get("city") or "Cartagena").strip()
+    zone = (query.get("zone") or query.get("neighborhood") or "").strip()
     city_slug = quote_plus(city.lower())
+    zone_slug = quote_plus(zone.lower())
     source_key = source.lower()
 
     if "finca" in source_key:
         return build_fincaraiz_search_url(query)
     if "metro" in source_key:
+        if zone:
+            return f"https://www.metrocuadrado.com/arriendo/{city_slug}/{zone_slug}/"
         return f"https://www.metrocuadrado.com/arriendo/{city_slug}/"
     if "olx" in source_key:
+        if zone:
+            return f"https://www.olx.com.co/inmuebles_c378/{zone_slug}"
         return f"https://www.olx.com.co/inmuebles_c378/{city_slug.lower()}"
     if "facebook" in source_key:
-        return f"https://www.facebook.com/marketplace/cartagena/search/?query={quote_plus(f'arriendo {city}')}"
+        search_scope = f"{zone} {city}" if zone else city
+        return f"https://www.facebook.com/marketplace/cartagena/search/?query={quote_plus(f'arriendo {search_scope}')}"
     return build_fincaraiz_search_url(query)
 
 
@@ -115,6 +140,24 @@ def normalize_property(item: dict, query: dict) -> dict:
 
 
 def property_matches_query(property_item: dict, query: dict) -> bool:
+    requested_zone = _search_text(query.get("zone") or query.get("neighborhood"))
+    if requested_zone:
+        location_text = _search_text(
+            " ".join(str(property_item.get(field) or "") for field in ("zone", "neighborhood"))
+        )
+        location_tokens = set(location_text.split())
+        known_location = bool(location_tokens) and not location_tokens <= {"cartagena"}
+        if known_location and requested_zone not in location_text:
+            return False
+        if not known_location:
+            haystack = _search_text(
+                " ".join(
+                    str(property_item.get(field) or "")
+                    for field in ("title", "description", "url")
+                )
+            )
+            if requested_zone not in haystack:
+                return False
     if query.get("price_min") and property_item.get("price") and property_item["price"] < int(query["price_min"]):
         return False
     if query.get("price_max") and property_item.get("price") and property_item["price"] > int(query["price_max"]):
@@ -134,7 +177,7 @@ def _run_spider(spider_name: str, query: dict) -> list[dict]:
     env["PYTHONPATH"] = f"{PROJECT_ROOT}:{PROJECT_ROOT / 'backend'}:{env.get('PYTHONPATH', '')}"
 
     try:
-        spider_timeout = {"fincaraiz": 8, "metrocuadrado": 8, "olx": 4}.get(spider_name, 6)
+        spider_timeout = {"fincaraiz": 25, "metrocuadrado": 18}.get(spider_name, 10)
         subprocess.run(
             [
                 "scrapy",
@@ -168,7 +211,16 @@ def _run_spider(spider_name: str, query: dict) -> list[dict]:
 def run_live_property_search(query: dict) -> list[dict]:
     live_results: list[dict] = []
     seen_urls: set[str] = set()
-    spider_names = ("fincaraiz", "metrocuadrado", "olx")
+    source_spiders = {
+        "FincaRaiz": "fincaraiz",
+        "Metrocuadrado": "metrocuadrado",
+    }
+    requested_sources = [
+        source
+        for source in query.get("sources") or source_spiders
+        if source in source_spiders
+    ]
+    spider_names = tuple(source_spiders[source] for source in requested_sources) or tuple(source_spiders.values())
 
     with ThreadPoolExecutor(max_workers=len(spider_names)) as executor:
         future_map = {

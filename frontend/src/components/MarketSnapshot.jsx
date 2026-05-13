@@ -16,9 +16,7 @@ function buildSearchLine(parsedQuery) {
   }
 
   const requestedZone = parsedQuery.zone || parsedQuery.neighborhood;
-  const scope = requestedZone
-    ? `${parsedQuery.city || "Cartagena"} completa · referencia: ${requestedZone}`
-    : parsedQuery.city || "Cartagena";
+  const scope = requestedZone || parsedQuery.city || "Cartagena";
   const fragments = [
     parsedQuery.property_type || "inmuebles",
     scope,
@@ -62,9 +60,7 @@ function MarketSnapshot({ parsedQuery, analysis, results, loading, compact = fal
   const resultCount = results?.length || analysis?.total_results || 0;
   const opportunity = analysis?.opportunities?.[0];
   const requestedZone = parsedQuery?.zone || parsedQuery?.neighborhood;
-  const scopeLabel = requestedZone
-    ? `${parsedQuery?.city || "Cartagena"} completa`
-    : parsedQuery?.city || "Cartagena";
+  const scopeLabel = requestedZone || parsedQuery?.city || "Cartagena";
 
   return (
     <section className="overflow-hidden rounded-[24px] border border-white/10 bg-[radial-gradient(circle_at_top_left,_rgba(16,185,129,0.16),_transparent_34%),linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.02))] sm:rounded-[30px]">

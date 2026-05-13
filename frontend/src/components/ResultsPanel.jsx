@@ -2,9 +2,7 @@ import ResultCard from "./ResultCard";
 
 function ResultsPanel({ parsedQuery, analysis, results, loading }) {
   const requestedZone = parsedQuery?.zone || parsedQuery?.neighborhood;
-  const title = requestedZone
-    ? `${parsedQuery?.city || "Cartagena"} completa`
-    : parsedQuery?.city || "Cartagena";
+  const title = requestedZone || parsedQuery?.city || "Cartagena";
 
   return (
     <div className="flex h-full flex-col text-slate-200">
@@ -21,9 +19,6 @@ function ResultsPanel({ parsedQuery, analysis, results, loading }) {
               <h3 className="mt-1 text-sm font-medium text-white">
                 {parsedQuery ? `${parsedQuery.property_type || "Inmuebles"} en ${title}` : "Esperando búsqueda"}
               </h3>
-              {requestedZone ? (
-                <p className="mt-1 text-xs leading-5 text-slate-400">Referencia solicitada: {requestedZone}</p>
-              ) : null}
             </div>
             <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-300">
               {results.length}
