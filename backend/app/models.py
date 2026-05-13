@@ -20,6 +20,7 @@ class Property(Base):
     bedrooms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     bathrooms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     area_m2: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
+    features: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     source: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
     url: Mapped[str] = mapped_column(Text, nullable=False, unique=False)
     image_url: Mapped[str | None] = mapped_column(Text, nullable=True)

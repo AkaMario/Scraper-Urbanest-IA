@@ -2,6 +2,7 @@ function Sidebar({
   conversations = [],
   activeConversationId,
   onSelectConversation,
+  onDeleteConversation,
   onNewConversation,
   onClearHistory,
   loading,
@@ -71,7 +72,7 @@ function Sidebar({
           <NewChatIcon />
           <span>Nuevo chat</span>
         </button>
-        <button
+        {/* <button
           type="button"
           onClick={onClearHistory}
           disabled={loading || conversations.length === 0}
@@ -79,7 +80,7 @@ function Sidebar({
         >
           <TrashIcon />
           <span>Borrar conversaciones</span>
-        </button>
+        </button> */}
       </div>
 
       <div className="flex-1 overflow-y-auto pr-1">
@@ -102,29 +103,46 @@ function Sidebar({
               const isActive = conversation.id === activeConversationId;
 
               return (
-              <button
+              <div
                 key={conversation.id}
-                type="button"
-                onClick={() => onSelectConversation?.(conversation.id)}
-                disabled={loading}
-                className={`group w-full rounded-3xl border px-4 py-3 text-left transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                role="button"
+                tabIndex={0}
+                onClick={() => !loading && onSelectConversation?.(conversation.id)}
+                onKeyDown={(event) => {
+                  if (!loading && (event.key === "Enter" || event.key === " ")) {
+                    event.preventDefault();
+                    onSelectConversation?.(conversation.id);
+                  }
+                }}
+                className={`group w-full rounded-3xl border px-4 py-3 text-left transition ${
+                  loading ? "cursor-not-allowed opacity-60" : ""
+                } ${
                   isActive
                     ? "border-emerald-400/40 bg-emerald-500/10"
                     : "border-white/10 bg-[#262c3d] hover:border-emerald-400/30 hover:bg-[#2e3449]"
                 }`}
               >
                 <div className="flex items-start gap-3">
-                  {/* <span className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-2xl bg-white/5 text-slate-300 transition group-hover:bg-emerald-400/15 group-hover:text-emerald-200">
-                    <SearchIcon />
-                  </span> */}
                   <div className="min-w-0">
                     <p className="line-clamp-2 text-sm leading-6 text-slate-100">{conversation.title}</p>
-                    <p className="mt-2 text-[11px] text-slate-500">
-                      {conversation.messages?.length || 0} mensajes.
-                    </p>
+                    <span className="mt-2 flex items-center justify-between text-[12px] text-slate-500">
+                      <span className="text-[11px] text-slate-500">
+                        {conversation.messages?.length || 0} mensajes.
+                      </span>
+                      <button
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-300 transition hover:text-red-400"
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onDeleteConversation?.(conversation.id);
+                        }}
+                      >
+                        <TrashIcon />
+                      </button>
+                    </span>
                   </div>
                 </div>
-              </button>
+              </div>
               );
             })}
           </div>

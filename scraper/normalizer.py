@@ -116,6 +116,32 @@ def _price_from_text(price_text: str | None, fallback: int) -> int:
     return fallback
 
 
+def _normalize_features(value) -> list[str]:
+    if not value:
+        return []
+    if isinstance(value, str):
+        raw_values = re.split(r"[,;|\n]+", value)
+    elif isinstance(value, list):
+        raw_values = value
+    else:
+        return []
+
+    features: list[str] = []
+    seen: set[str] = set()
+    for item in raw_values:
+        text = re.sub(r"\s+", " ", str(item)).strip(" .:-")
+        if not text or len(text) < 3:
+            continue
+        key = _search_text(text)
+        if key in seen:
+            continue
+        seen.add(key)
+        features.append(text[:80])
+        if len(features) >= 12:
+            break
+    return features
+
+
 def normalize_property(item: dict, query: dict) -> dict:
     default_price = int(query.get("price_max") or query.get("price_min") or 2_000_000)
     zone = item.get("zone") or item.get("neighborhood") or "Cartagena"
@@ -131,6 +157,7 @@ def normalize_property(item: dict, query: dict) -> dict:
         "bedrooms": item.get("bedrooms") if item.get("bedrooms") is not None else query.get("bedrooms"),
         "bathrooms": item.get("bathrooms") if item.get("bathrooms") is not None else query.get("bathrooms"),
         "area_m2": item.get("area_m2"),
+        "features": _normalize_features(item.get("features")),
         "source": item.get("source") or "Mock",
         "url": item.get("url") or build_source_search_url(item.get("source") or "FincaRaiz", query),
         "image_url": item.get("image_url"),
@@ -142,20 +169,20 @@ def normalize_property(item: dict, query: dict) -> dict:
 def property_matches_query(property_item: dict, query: dict) -> bool:
     requested_zone = _search_text(query.get("zone") or query.get("neighborhood"))
     if requested_zone:
+        haystack = _search_text(
+            " ".join(
+                str(property_item.get(field) or "")
+                for field in ("title", "description", "url")
+            )
+        )
         location_text = _search_text(
             " ".join(str(property_item.get(field) or "") for field in ("zone", "neighborhood"))
         )
         location_tokens = set(location_text.split())
         known_location = bool(location_tokens) and not location_tokens <= {"cartagena"}
-        if known_location and requested_zone not in location_text:
+        if known_location and requested_zone not in location_text and requested_zone not in haystack:
             return False
         if not known_location:
-            haystack = _search_text(
-                " ".join(
-                    str(property_item.get(field) or "")
-                    for field in ("title", "description", "url")
-                )
-            )
             if requested_zone not in haystack:
                 return False
     if query.get("price_min") and property_item.get("price") and property_item["price"] < int(query["price_min"]):
@@ -177,7 +204,7 @@ def _run_spider(spider_name: str, query: dict) -> list[dict]:
     env["PYTHONPATH"] = f"{PROJECT_ROOT}:{PROJECT_ROOT / 'backend'}:{env.get('PYTHONPATH', '')}"
 
     try:
-        spider_timeout = {"fincaraiz": 25, "metrocuadrado": 18}.get(spider_name, 10)
+        spider_timeout = {"fincaraiz": 45, "metrocuadrado": 35}.get(spider_name, 15)
         subprocess.run(
             [
                 "scrapy",

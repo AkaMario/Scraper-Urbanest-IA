@@ -20,7 +20,7 @@ Eres Urbanest IA, asistente inmobiliario para arriendos en Cartagena.
 Responde en espanol, en un solo mensaje, tono natural.
 Usa solo el contexto dado. No inventes datos.
 Si el usuario saluda, saluda y explica brevemente que puedes buscar y comparar inmuebles.
-Si hay inmuebles en contexto, puedes compararlos y responder preguntas sobre ellos.
+Si hay inmuebles en contexto, puedes compararlos y responder preguntas sobre precio, descripcion y caracteristicas.
 Si falta informacion, dilo.
 No respondas en JSON.
 
@@ -65,7 +65,7 @@ Eres Urbanest IA, una IA conversacional real dentro de una app inmobiliaria.
 Responde en espanol natural, claro y directo.
 No digas que tienes plugins. Si hablas de internet, explica que el backend consulta fuentes permitidas y te entrega contexto.
 No inventes resultados, URLs ni capacidades. Si una pagina no esta en el contexto aprobado, dilo.
-Puedes responder preguntas sobre tu funcionamiento, fuentes, scrapers, limitaciones, busquedas previas y propiedades en contexto.
+Puedes responder preguntas sobre tu funcionamiento, fuentes, scrapers, limitaciones, busquedas previas y propiedades en contexto, incluyendo descripcion y caracteristicas.
 Si el usuario pregunta que modelo usas, responde directamente con el modelo indicado en el contexto.
 Puedes explicar conceptos inmobiliarios generales como VIS, VIP, canon, administración, avalúo, subsidios y financiación.
 No rechaces preguntas educativas o definiciones inmobiliarias normales.
@@ -148,7 +148,10 @@ def _truncate_properties(properties: list[dict[str, Any]], limit: int = 5) -> li
     for item in properties[:limit]:
         description = item.get("description")
         if description:
-            description = str(description)[:180]
+            description = str(description)[:320]
+        features = item.get("features") or []
+        if not isinstance(features, list):
+            features = []
         serialized.append(
             {
                 "title": item.get("title"),
@@ -161,6 +164,7 @@ def _truncate_properties(properties: list[dict[str, Any]], limit: int = 5) -> li
                 "source": item.get("source"),
                 "url": item.get("url"),
                 "description": description,
+                "features": [str(feature)[:80] for feature in features[:8]],
             }
         )
     return serialized
@@ -204,20 +208,21 @@ def _format_properties(properties: list[dict[str, Any]]) -> str:
 
     lines: list[str] = []
     for index, item in enumerate(properties, start=1):
-        lines.append(
-            " | ".join(
-                [
-                    f"{index}. {item.get('title') or 'Inmueble'}",
-                    f"zona={item.get('zone') or item.get('neighborhood') or '-'}",
-                    f"precio={item.get('price') or '-'}",
-                    f"hab={item.get('bedrooms') or '-'}",
-                    f"banos={item.get('bathrooms') or '-'}",
-                    f"area={item.get('area_m2') or '-'}",
-                    f"fuente={item.get('source') or '-'}",
-                    f"url={item.get('url') or '-'}",
-                ]
-            )
-        )
+        parts = [
+            f"{index}. {item.get('title') or 'Inmueble'}",
+            f"zona={item.get('zone') or item.get('neighborhood') or '-'}",
+            f"precio={item.get('price') or '-'}",
+            f"hab={item.get('bedrooms') or '-'}",
+            f"banos={item.get('bathrooms') or '-'}",
+            f"area={item.get('area_m2') or '-'}",
+            f"fuente={item.get('source') or '-'}",
+            f"url={item.get('url') or '-'}",
+        ]
+        if item.get("description"):
+            parts.append(f"descripcion={item.get('description')}")
+        if item.get("features"):
+            parts.append(f"caracteristicas={', '.join(item.get('features'))}")
+        lines.append(" | ".join(parts))
     return "\n".join(lines)
 
 

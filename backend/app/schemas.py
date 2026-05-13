@@ -40,6 +40,7 @@ class PropertyOut(BaseModel):
     bedrooms: int | None = None
     bathrooms: int | None = None
     area_m2: float | None = None
+    features: list[str] | None = Field(default_factory=list)
     source: str
     url: str
     image_url: str | None = None
@@ -57,6 +58,7 @@ class PropertyContext(BaseModel):
     bedrooms: int | None = None
     bathrooms: int | None = None
     area_m2: float | None = None
+    features: list[str] | None = Field(default_factory=list)
     source: str | None = None
     url: str | None = None
     image_url: str | None = None

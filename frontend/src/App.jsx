@@ -384,6 +384,24 @@ function App() {
     setIsTyping(false);
   };
 
+  const handleDeleteConversation = (conversationId) => {
+    setConversations((current) => {
+      const updated = current.filter((conversation) => conversation.id !== conversationId);
+      if (activeConversationIdRef.current === conversationId) {
+        const nextConversation = updated[0] || null;
+        setActiveConversationId(nextConversation?.id || null);
+        activeConversationIdRef.current = nextConversation?.id || null;
+        setMessages(nextConversation?.messages || []);
+        setResults(nextConversation?.results || []);
+        setAnalysis(nextConversation?.analysis || null);
+        setParsedQuery(nextConversation?.parsedQuery || null);
+        setJobId(null);
+        setIsTyping(false);
+      }
+      return updated;
+    });
+  };
+
   const handleClearConversations = () => {
     setConversations([]);
     handleNewConversation();
@@ -397,6 +415,7 @@ function App() {
           conversations={conversations}
           activeConversationId={activeConversationId}
           onSelectConversation={handleSelectConversation}
+          onDeleteConversation={handleDeleteConversation}
           onNewConversation={handleNewConversation}
           onClearHistory={handleClearConversations}
           loading={loading}

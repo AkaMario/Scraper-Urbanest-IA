@@ -1,5 +1,6 @@
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
 import uvicorn
 
@@ -14,6 +15,19 @@ from app.tasks.scraping_tasks import get_job_results
 
 
 Base.metadata.create_all(bind=engine)
+
+
+def ensure_runtime_columns() -> None:
+    columns = {column["name"] for column in inspect(engine).get_columns("properties")}
+    if "features" in columns:
+        return
+
+    column_type = "JSON" if engine.dialect.name != "sqlite" else "TEXT"
+    with engine.begin() as connection:
+        connection.execute(text(f"ALTER TABLE properties ADD COLUMN features {column_type}"))
+
+
+ensure_runtime_columns()
 
 app = FastAPI(title="Urbanest IA API", version="0.1.0")
 

@@ -23,19 +23,46 @@ class FincaRaizSpider(scrapy.Spider):
 
     def parse(self, response):
         yielded_urls = set()
+        yielded_count = 0
 
         for item in _extract_next_data_items(response):
             listing = _serialize_next_data_item(item, response, self.query)
             if not listing or listing["url"] in yielded_urls:
                 continue
             yielded_urls.add(listing["url"])
-            yield listing
+            yielded_count += 1
+            yield scrapy.Request(
+                listing["url"],
+                callback=self.parse_detail,
+                errback=self.detail_failed,
+                meta={"listing": listing},
+                dont_filter=True,
+            )
+            if yielded_count >= 12:
+                return
 
         for listing in _extract_visible_card_items(response, self.query):
             if listing["url"] in yielded_urls:
                 continue
             yielded_urls.add(listing["url"])
-            yield listing
+            yielded_count += 1
+            yield scrapy.Request(
+                listing["url"],
+                callback=self.parse_detail,
+                errback=self.detail_failed,
+                meta={"listing": listing},
+                dont_filter=True,
+            )
+            if yielded_count >= 12:
+                return
+
+    def parse_detail(self, response):
+        listing = response.meta["listing"]
+        detail_data = _extract_detail_data(response)
+        yield {**listing, **detail_data}
+
+    def detail_failed(self, failure):
+        yield failure.request.meta["listing"]
 
 
 def _to_int(value):
@@ -56,6 +83,21 @@ def _area_to_float(value):
 
 def _clean_text(value: str | None) -> str:
     return re.sub(r"\s+", " ", value or "").strip()
+
+
+def _unique_texts(values, limit=12):
+    output = []
+    seen = set()
+    for value in values:
+        text = _clean_text(value)
+        key = text.lower()
+        if not text or len(text) < 3 or key in seen:
+            continue
+        seen.add(key)
+        output.append(text)
+        if len(output) >= limit:
+            break
+    return output
 
 
 def _first_location_name(locations: dict, key: str) -> str | None:
@@ -160,6 +202,47 @@ def _extract_visible_card_items(response, query: dict):
             "url": response.urljoin(href),
             "image_url": card.css("img::attr(src)").get(),
         }
+
+
+def _extract_detail_data(response) -> dict:
+    description_candidates = [
+        response.css("meta[name='description']::attr(content)").get(),
+        response.css("[class*='description']::text, [class*='Description']::text").get(),
+        response.css("section p::text, main p::text").get(),
+    ]
+    description = next((_clean_text(item) for item in description_candidates if _clean_text(item)), None)
+    page_text = _clean_text(" ".join(response.css("main ::text, body ::text").getall()))
+    if (not description or len(description) < 80) and page_text:
+        description = page_text[:500]
+
+    feature_values = response.css(
+        "[class*='feature'] ::text, [class*='Feature'] ::text, "
+        "[class*='amenit'] ::text, [class*='Amenit'] ::text, "
+        "[class*='characteristic'] ::text, [class*='Characteristic'] ::text, "
+        "li::text"
+    ).getall()
+
+    json_features = []
+    for script in response.css("script[type='application/ld+json']::text").getall():
+        try:
+            payload = json.loads(script)
+        except Exception:
+            continue
+        items = payload if isinstance(payload, list) else [payload]
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            for key in ("amenityFeature", "description"):
+                value = item.get(key)
+                if isinstance(value, list):
+                    json_features.extend(str(entry.get("name") or entry) for entry in value)
+                elif value:
+                    json_features.append(str(value))
+
+    return {
+        "description": description,
+        "features": _unique_texts([*feature_values, *json_features], limit=12),
+    }
 
 
 def _match_first(pattern: str, value: str) -> str | None:

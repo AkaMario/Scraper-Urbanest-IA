@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, func, inspect, or_, select, text
 
 from app.database import SessionLocal
 from app.models import Property, ScrapingJob, SearchQuery
@@ -25,6 +25,17 @@ def _selected_sources(parsed_query: dict) -> tuple[str, ...]:
         if source in ACTIVE_PROPERTY_SOURCES
     )
     return requested or ACTIVE_PROPERTY_SOURCES
+
+
+def _ensure_property_detail_columns(db) -> None:
+    columns = {column["name"] for column in inspect(db.bind).get_columns("properties")}
+    if "features" in columns:
+        return
+
+    dialect = db.bind.dialect.name
+    column_type = "JSON" if dialect != "sqlite" else "TEXT"
+    db.execute(text(f"ALTER TABLE properties ADD COLUMN features {column_type}"))
+    db.commit()
 
 
 @celery.task(name="app.tasks.scraping_tasks.process_search_request")
@@ -56,6 +67,7 @@ def process_search_request(job_id: int, query_id: int, user_message: str) -> dic
             if property_matches_query(normalized, parsed_query)
         ]
 
+        _ensure_property_detail_columns(db)
         for item in normalized_results:
             db.add(Property(**item))
 

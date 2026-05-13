@@ -20,6 +20,7 @@ class MetroCuadradoSpider(scrapy.Spider):
         yield scrapy.Request(url, callback=self.parse, dont_filter=True)
 
     def parse(self, response):
+        yielded_count = 0
         script_chunks = re.findall(r"<script>(.*?)</script>", response.text, re.S)
         for chunk in script_chunks:
             if "initialResults" not in chunk:
@@ -31,7 +32,7 @@ class MetroCuadradoSpider(scrapy.Spider):
                 continue
 
             for item in items[:20]:
-                yield {
+                listing = {
                     "title": item.get("title") or "Inmueble en arriendo",
                     "description": item.get("sector") or item.get("subtitle") or item.get("title"),
                     "city": self.query.get("city", "Cartagena"),
@@ -46,12 +47,22 @@ class MetroCuadradoSpider(scrapy.Spider):
                     "url": response.urljoin(item.get("link") or ""),
                     "image_url": item.get("imageLink"),
                 }
+                yielded_count += 1
+                yield scrapy.Request(
+                    listing["url"],
+                    callback=self.parse_detail,
+                    errback=self.detail_failed,
+                    meta={"listing": listing},
+                    dont_filter=True,
+                )
+                if yielded_count >= 12:
+                    return
             return
 
         for card in response.css("article, div[class*='property']")[:10]:
             title = "".join(card.css("h2 *::text, h3 *::text").getall()).strip()
             href = card.css("a::attr(href)").get()
-            yield {
+            listing = {
                 "title": title or "Inmueble en arriendo",
                 "description": " ".join(card.css("p *::text").getall()).strip(),
                 "city": self.query.get("city", "Cartagena"),
@@ -64,6 +75,24 @@ class MetroCuadradoSpider(scrapy.Spider):
                 "url": response.urljoin(href) if href else response.url,
                 "image_url": card.css("img::attr(src)").get(),
             }
+            yielded_count += 1
+            yield scrapy.Request(
+                listing["url"],
+                callback=self.parse_detail,
+                errback=self.detail_failed,
+                meta={"listing": listing},
+                dont_filter=True,
+            )
+            if yielded_count >= 12:
+                return
+
+    def parse_detail(self, response):
+        listing = response.meta["listing"]
+        detail_data = _extract_detail_data(response)
+        yield {**listing, **detail_data}
+
+    def detail_failed(self, failure):
+        yield failure.request.meta["listing"]
 
 
 def _to_int(value):
@@ -80,6 +109,49 @@ def _to_float(value):
         return float(str(value).replace(",", "."))
     except ValueError:
         return None
+
+
+def _clean_text(value: str | None) -> str:
+    return re.sub(r"\s+", " ", value or "").strip()
+
+
+def _unique_texts(values, limit=12):
+    output = []
+    seen = set()
+    for value in values:
+        text = _clean_text(value)
+        key = text.lower()
+        if not text or len(text) < 3 or key in seen:
+            continue
+        seen.add(key)
+        output.append(text)
+        if len(output) >= limit:
+            break
+    return output
+
+
+def _extract_detail_data(response) -> dict:
+    description_candidates = [
+        response.css("meta[name='description']::attr(content)").get(),
+        response.css("[class*='description']::text, [class*='Description']::text").get(),
+        response.css("section p::text, main p::text").get(),
+    ]
+    description = next((_clean_text(item) for item in description_candidates if _clean_text(item)), None)
+    page_text = _clean_text(" ".join(response.css("main ::text, body ::text").getall()))
+    if (not description or len(description) < 80) and page_text:
+        description = page_text[:500]
+
+    feature_values = response.css(
+        "[class*='feature'] ::text, [class*='Feature'] ::text, "
+        "[class*='amenit'] ::text, [class*='Amenit'] ::text, "
+        "[class*='caracter'] ::text, [class*='Caracter'] ::text, "
+        "li::text"
+    ).getall()
+
+    return {
+        "description": description,
+        "features": _unique_texts(feature_values, limit=12),
+    }
 
 
 def _extract_results_array(decoded_text: str):
