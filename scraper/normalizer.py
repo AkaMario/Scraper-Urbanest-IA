@@ -9,6 +9,8 @@ from pathlib import Path
 from urllib.parse import quote_plus
 import json
 
+from app.services.cartagena_locations import location_search_terms, normalize_neighborhood
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SCRAPER_ROOT = PROJECT_ROOT / "scraper"
@@ -144,14 +146,22 @@ def _normalize_features(value) -> list[str]:
 
 def normalize_property(item: dict, query: dict) -> dict:
     default_price = int(query.get("price_max") or query.get("price_min") or 2_000_000)
-    zone = item.get("zone") or item.get("neighborhood") or "Cartagena"
+    raw_zone = item.get("zone") or item.get("neighborhood") or "Cartagena"
+    zone = normalize_neighborhood(raw_zone) or raw_zone
+    query_zone = normalize_neighborhood(query.get("zone") or query.get("neighborhood"))
+    query_zone_text = _search_text(query_zone)
+    listing_text = _search_text(
+        " ".join(str(item.get(field) or "") for field in ("title", "description", "url"))
+    )
+    if query_zone and query_zone_text and query_zone_text in listing_text:
+        zone = query_zone
     property_type = normalize_property_type(item.get("property_type") or query.get("property_type")) or "apartamento"
     return {
         "title": item.get("title") or f"Inmueble en {zone}",
         "description": item.get("description") or "Propiedad listada en arriendo en Cartagena.",
         "city": item.get("city") or query.get("city") or "Cartagena",
         "zone": zone,
-        "neighborhood": item.get("neighborhood") or zone,
+        "neighborhood": normalize_neighborhood(item.get("neighborhood") or zone) or item.get("neighborhood") or zone,
         "property_type": property_type,
         "price": int(item.get("price") or _price_from_text(item.get("price_text"), default_price)),
         "bedrooms": item.get("bedrooms") if item.get("bedrooms") is not None else query.get("bedrooms"),
@@ -167,8 +177,11 @@ def normalize_property(item: dict, query: dict) -> dict:
 
 
 def property_matches_query(property_item: dict, query: dict) -> bool:
-    requested_zone = _search_text(query.get("zone") or query.get("neighborhood"))
-    if requested_zone:
+    requested_zones = location_search_terms(query.get("zone") or query.get("neighborhood"))
+    if query.get("accepted_zones"):
+        requested_zones = [str(zone) for zone in query.get("accepted_zones") or [] if str(zone).strip()]
+    requested_zone_terms = [_search_text(zone) for zone in requested_zones if _search_text(zone)]
+    if requested_zone_terms:
         haystack = _search_text(
             " ".join(
                 str(property_item.get(field) or "")
@@ -180,10 +193,10 @@ def property_matches_query(property_item: dict, query: dict) -> bool:
         )
         location_tokens = set(location_text.split())
         known_location = bool(location_tokens) and not location_tokens <= {"cartagena"}
-        if known_location and requested_zone not in location_text and requested_zone not in haystack:
+        if known_location and not any(term in location_text or term in haystack for term in requested_zone_terms):
             return False
         if not known_location:
-            if requested_zone not in haystack:
+            if not any(term in haystack for term in requested_zone_terms):
                 return False
     if query.get("price_min") and property_item.get("price") and property_item["price"] < int(query["price_min"]):
         return False
@@ -204,7 +217,7 @@ def _run_spider(spider_name: str, query: dict) -> list[dict]:
     env["PYTHONPATH"] = f"{PROJECT_ROOT}:{PROJECT_ROOT / 'backend'}:{env.get('PYTHONPATH', '')}"
 
     try:
-        spider_timeout = {"fincaraiz": 45, "metrocuadrado": 35}.get(spider_name, 15)
+        spider_timeout = {"fincaraiz": 45, "metrocuadrado": 12}.get(spider_name, 15)
         subprocess.run(
             [
                 "scrapy",

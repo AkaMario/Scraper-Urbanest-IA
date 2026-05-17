@@ -338,6 +338,8 @@ def build_search_reply(
     requested_zone = safe_query.get("zone") or safe_query.get("neighborhood")
     city_scope = safe_query.get("city") or "Cartagena"
     zone = requested_zone or f"distintas zonas de {city_scope}"
+    accepted_zones = safe_query.get("accepted_zones") or []
+    nearby_zones_checked = safe_query.get("nearby_zones_checked") or []
     property_type = safe_query.get("property_type") or "inmuebles"
     total = len(safe_properties)
 
@@ -353,10 +355,30 @@ def build_search_reply(
             pass
 
     if not total:
+        has_filters = any(
+            safe_query.get(key)
+            for key in ("zone", "neighborhood", "price_min", "price_max", "bedrooms", "bathrooms")
+        )
+        if requested_zone and nearby_zones_checked:
+            return (
+                f"No encontré opciones de {property_type} que encajen con los criterios actuales en {zone} "
+                f"ni en barrios cercanos revisados: {', '.join(str(item) for item in nearby_zones_checked)}. "
+                "Si quieres, puedo ampliar el presupuesto, quitar filtros o buscar en toda Cartagena."
+            )
+        if requested_zone:
+            return (
+                f"No encontré opciones de {property_type} que encajen con los criterios actuales en {zone}. "
+                "Si quieres, puedo ampliar a barrios cercanos, subir el presupuesto o quitar algun filtro."
+            )
+        if not has_filters:
+            return (
+                f"No encontré opciones de {property_type} disponibles en {city_scope} en este momento. "
+                "La busqueda no tenia filtros de barrio, precio, habitaciones ni banos; consulte la ciudad completa. "
+                "Puedes intentar de nuevo o probar con una zona concreta."
+            )
         return (
-            f"No encontré {property_type} que encajen bien con el presupuesto y criterios actuales para {zone}. "
-            "La busqueda se hizo sin cerrar el resultado a un solo barrio. "
-            "Si quieres, puedo ampliar el rango, cambiar el tipo de inmueble o bajar algun criterio."
+            f"No encontré opciones de {property_type} que encajen con los criterios actuales en {zone}. "
+            "Si quieres, puedo ampliar el rango, cambiar el tipo de inmueble o quitar algun criterio."
         )
 
     average_price = safe_analysis.get("average_price")
@@ -364,10 +386,14 @@ def build_search_reply(
     max_price = safe_analysis.get("max_price")
     opportunity_count = len(safe_analysis.get("opportunities") or [])
 
-    message = (
-        f"Encontré {total} opción(es) de {property_type} para {zone}. "
-        f"El mercado del lote quedó entre {min_price or 'sin dato'} y {max_price or 'sin dato'} pesos"
-    )
+    if safe_query.get("location_match_scope") == "nearby" and accepted_zones:
+        message = (
+            f"No encontré opciones en {zone}, pero sí {total} opción(es) de {property_type} "
+            f"en barrios cercanos: {', '.join(str(item) for item in accepted_zones)}. "
+        )
+    else:
+        message = f"Encontré {total} opción(es) de {property_type} para {zone}. "
+    message += f"El mercado del lote quedó entre {min_price or 'sin dato'} y {max_price or 'sin dato'} pesos"
     if average_price:
         message += f", con un promedio cercano a {round(float(average_price))}."
     else:

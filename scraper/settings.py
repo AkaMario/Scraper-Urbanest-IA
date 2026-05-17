@@ -4,7 +4,7 @@ SPIDER_MODULES = ["scraper.spiders"]
 NEWSPIDER_MODULE = "scraper.spiders"
 
 ROBOTSTXT_OBEY = False
-DOWNLOAD_DELAY = 2
+DOWNLOAD_DELAY = 0
 AUTOTHROTTLE_ENABLED = True
 USER_AGENT = "UrbanestIA/0.1 (+local ethical research bot)"
 LOG_LEVEL = "INFO"

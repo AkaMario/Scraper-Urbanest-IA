@@ -2,7 +2,7 @@ import ResultCard from "./ResultCard";
 import MarketSnapshot from "./MarketSnapshot";
 
 function ChatResultsBlock({ parsedQuery, analysis, results, onPromptClick }) {
-  const useHorizontalLayout = results.length > 3;
+  const isSingleProperty = results.length === 1;
 
   return (
     <div className="space-y-4 sm:space-y-5">
@@ -25,34 +25,26 @@ function ChatResultsBlock({ parsedQuery, analysis, results, onPromptClick }) {
                 {results.length} inmuebles para revisar
               </h4>
               <p className="mt-1 text-xs leading-5 text-slate-400 sm:text-sm">
-                {useHorizontalLayout
-                  ? "Desliza horizontalmente para comparar sin perder contexto."
-                  : "Vista rápida con precio, ubicación y datos clave."}
+                {isSingleProperty
+                  ? "Vista completa de la propiedad encontrada."
+                  : "Desliza horizontalmente para comparar sin perder contexto."}
               </p>
             </div>
             <span className="w-fit rounded-full border border-emerald-400/15 bg-emerald-400/10 px-3 py-1 text-xs font-medium text-emerald-200">
-              {useHorizontalLayout ? "Scroll horizontal" : "Lote actual"}
+              {isSingleProperty ? "Vista completa" : "Scroll horizontal"}
             </span>
           </div>
         </div>
 
-        {useHorizontalLayout ? (
-          <div className="overflow-x-auto px-3 py-4 sm:px-4">
-            <div className="flex snap-x snap-mandatory gap-3 pb-2 sm:gap-4">
-              {results.map((property) => (
-                <div key={`${property.source}-${property.url}`} className="w-[82vw] max-w-[360px] shrink-0 sm:w-[320px] md:w-[340px]">
-                  <ResultCard property={property} compact horizontal />
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : (
-          <div className="grid gap-3 p-3 sm:grid-cols-2 sm:p-4 md:grid-cols-3">
+        <div className="overflow-x-auto px-3 py-4 sm:px-4">
+          <div className="flex snap-x snap-mandatory gap-3 pb-2 sm:gap-4">
             {results.map((property) => (
-              <ResultCard key={`${property.source}-${property.url}`} property={property} />
+              <div key={`${property.source}-${property.url}`} className={`${isSingleProperty ? "w-full" : "w-[82vw] max-w-[360px] shrink-0 sm:w-[320px] md:w-[340px]"}`}>
+                <ResultCard property={property} compact horizontal />
+              </div>
             ))}
           </div>
-        )}
+        </div>
       </div>
 
       <div className="rounded-[22px] border border-emerald-400/15 bg-emerald-400/5 p-3 sm:rounded-[24px] sm:p-4">

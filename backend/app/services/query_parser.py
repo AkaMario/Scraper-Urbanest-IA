@@ -2,22 +2,8 @@ import re
 from typing import Any
 
 from app.ollama_client import parse_query_with_ollama
+from app.services.cartagena_locations import ZONE_CANDIDATES, normalize_neighborhood
 from app.services.web_context import is_function_question
-
-
-ZONE_CANDIDATES = [
-    "manga",
-    "bocagrande",
-    "castillogrande",
-    "crespo",
-    "serena del mar",
-    "marbella",
-    "el laguito",
-    "pie de la popa",
-    "alto bosque",
-    "blas de lezo",
-    "torices",
-]
 
 
 PROPERTY_TYPES = {
@@ -159,7 +145,7 @@ def _looks_like_source_location(value: Any) -> bool:
 def fallback_parse_query(message: str) -> dict[str, Any]:
     lowered = message.lower()
     prices = _extract_price_values(lowered)
-    zone = next((candidate.title() for candidate in ZONE_CANDIDATES if candidate in lowered), None)
+    zone = normalize_neighborhood(lowered)
     if "cualquier barrio" in lowered or "cualquier zona" in lowered or "en cualquier barrio" in lowered:
         zone = None
     property_type = _extract_property_type(lowered) or "apartamento"
@@ -225,6 +211,10 @@ def normalize_query_payload(payload: dict[str, Any]) -> dict[str, Any]:
         normalized["zone"] = None
     if _looks_like_source_location(normalized.get("neighborhood")):
         normalized["neighborhood"] = None
+    canonical_zone = normalize_neighborhood(normalized.get("zone") or normalized.get("neighborhood"))
+    if canonical_zone:
+        normalized["zone"] = canonical_zone
+        normalized["neighborhood"] = canonical_zone
     if normalized.get("zone") and not normalized.get("neighborhood"):
         normalized["neighborhood"] = normalized["zone"]
     keywords = normalized.get("keywords") or []
@@ -242,6 +232,10 @@ def apply_message_overrides(payload: dict[str, Any], message: str, fallback_payl
         normalized["zone"] = None
     if _looks_like_source_location(normalized.get("neighborhood")):
         normalized["neighborhood"] = None
+    canonical_zone = normalize_neighborhood(normalized.get("zone") or normalized.get("neighborhood"))
+    if canonical_zone:
+        normalized["zone"] = canonical_zone
+        normalized["neighborhood"] = canonical_zone
 
     lowered = message.lower()
     if fallback_payload.get("bedrooms") is None and not re.search(r"\d+\s*(habitacion|habitaciones|alcoba|alcobas)", lowered):
