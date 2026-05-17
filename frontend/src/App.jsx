@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import AppShell from "./components/AppShell";
+import AdminPanel from "./components/AdminPanel";
 import ChatComposer from "./components/ChatComposer";
 import ChatMessage from "./components/ChatMessage";
 import ChatResultsBlock from "./components/ChatResultsBlock";
@@ -92,6 +93,7 @@ function App() {
   const [parsedQuery, setParsedQuery] = useState(activeConversation?.parsedQuery || null);
   const [sidebarOpen, setSidebarOpen] = useState(isLargeScreen);
   const [isTyping, setIsTyping] = useState(false);
+  const [view, setView] = useState("chat");
   const pollRef = useRef(null);
   const conversationRef = useRef(null);
 
@@ -409,6 +411,9 @@ function App() {
   };
 
   return (
+    view === "admin" ? (
+      <AdminPanel apiUrl={API_URL} onBack={() => setView("chat")} />
+    ) : (
     <AppShell
       sidebar={
         <Sidebar
@@ -428,6 +433,13 @@ function App() {
             jobId={jobId}
             resultCount={results.length}
           />
+          <button
+            type="button"
+            onClick={() => setView("admin")}
+            className="fixed right-4 top-4 z-20 rounded-xl border border-white/10 bg-[#202123]/90 px-3 py-2 text-xs font-medium text-slate-200 shadow-lg shadow-black/20 hover:bg-white/10"
+          >
+            Admin inmuebles
+          </button>
 
           <div
             ref={conversationRef}
@@ -469,6 +481,7 @@ function App() {
       onOpenSidebar={() => setSidebarOpen(true)}
       onCloseSidebar={() => setSidebarOpen(false)}
     />
+    )
   );
 }
 

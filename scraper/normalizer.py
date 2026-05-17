@@ -3,6 +3,7 @@ import re
 import subprocess
 import tempfile
 import time
+import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
@@ -14,6 +15,7 @@ from app.services.cartagena_locations import location_search_terms, normalize_ne
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SCRAPER_ROOT = PROJECT_ROOT / "scraper"
+logger = logging.getLogger(__name__)
 
 
 def _url_slug(value: str) -> str:
@@ -72,7 +74,8 @@ def build_fincaraiz_search_url(query: dict) -> str:
     city = _url_slug(query.get("city") or "Cartagena")
     zone = _url_slug(query.get("zone") or query.get("neighborhood") or "")
     property_segment = _fincaraiz_property_segment(query.get("property_type"))
-    path_parts = ["https://www.fincaraiz.com.co", "arriendo", property_segment]
+    operation = "venta" if query.get("operation") == "sale" else "arriendo"
+    path_parts = ["https://www.fincaraiz.com.co", operation, property_segment]
 
     if zone:
         path_parts.append(zone)
@@ -96,16 +99,18 @@ def build_source_search_url(source: str, query: dict) -> str:
     if "finca" in source_key:
         return build_fincaraiz_search_url(query)
     if "metro" in source_key:
+        operation = "venta" if query.get("operation") == "sale" else "arriendo"
         if zone:
-            return f"https://www.metrocuadrado.com/arriendo/{city_slug}/{zone_slug}/"
-        return f"https://www.metrocuadrado.com/arriendo/{city_slug}/"
+            return f"https://www.metrocuadrado.com/{operation}/{city_slug}/{zone_slug}/"
+        return f"https://www.metrocuadrado.com/{operation}/{city_slug}/"
     if "olx" in source_key:
         if zone:
             return f"https://www.olx.com.co/inmuebles_c378/{zone_slug}"
         return f"https://www.olx.com.co/inmuebles_c378/{city_slug.lower()}"
     if "facebook" in source_key:
         search_scope = f"{zone} {city}" if zone else city
-        return f"https://www.facebook.com/marketplace/cartagena/search/?query={quote_plus(f'arriendo {search_scope}')}"
+        operation_text = "venta" if query.get("operation") == "sale" else "arriendo"
+        return f"https://www.facebook.com/marketplace/cartagena/search/?query={quote_plus(f'{operation_text} {search_scope}')}"
     return build_fincaraiz_search_url(query)
 
 
@@ -158,19 +163,25 @@ def normalize_property(item: dict, query: dict) -> dict:
     property_type = normalize_property_type(item.get("property_type") or query.get("property_type")) or "apartamento"
     return {
         "title": item.get("title") or f"Inmueble en {zone}",
-        "description": item.get("description") or "Propiedad listada en arriendo en Cartagena.",
+        "description": item.get("description") or "Propiedad listada en portales inmobiliarios.",
         "city": item.get("city") or query.get("city") or "Cartagena",
         "zone": zone,
         "neighborhood": normalize_neighborhood(item.get("neighborhood") or zone) or item.get("neighborhood") or zone,
         "property_type": property_type,
+        "operation": item.get("operation") or query.get("operation") or "rent",
         "price": int(item.get("price") or _price_from_text(item.get("price_text"), default_price)),
         "bedrooms": item.get("bedrooms") if item.get("bedrooms") is not None else query.get("bedrooms"),
         "bathrooms": item.get("bathrooms") if item.get("bathrooms") is not None else query.get("bathrooms"),
+        "parking_spaces": item.get("parking_spaces"),
+        "stratum": item.get("stratum"),
         "area_m2": item.get("area_m2"),
         "features": _normalize_features(item.get("features")),
         "source": item.get("source") or "Mock",
         "url": item.get("url") or build_source_search_url(item.get("source") or "FincaRaiz", query),
         "image_url": item.get("image_url"),
+        "image_urls": item.get("image_urls") or ([item.get("image_url")] if item.get("image_url") else []),
+        "raw_text": item.get("raw_text"),
+        "raw_data": item,
         "scraped_at": datetime.utcnow(),
         "created_at": datetime.utcnow(),
     }
@@ -206,6 +217,8 @@ def property_matches_query(property_item: dict, query: dict) -> bool:
         return False
     if query.get("bathrooms") and property_item.get("bathrooms") and int(property_item["bathrooms"]) < int(query["bathrooms"]):
         return False
+    if query.get("operation") and property_item.get("operation") and property_item["operation"] != query["operation"]:
+        return False
     return True
 
 
@@ -217,7 +230,7 @@ def _run_spider(spider_name: str, query: dict) -> list[dict]:
     env["PYTHONPATH"] = f"{PROJECT_ROOT}:{PROJECT_ROOT / 'backend'}:{env.get('PYTHONPATH', '')}"
 
     try:
-        spider_timeout = {"fincaraiz": 45, "metrocuadrado": 12}.get(spider_name, 15)
+        spider_timeout = {"fincaraiz": 60, "metrocuadrado": 45}.get(spider_name, 30)
         subprocess.run(
             [
                 "scrapy",
@@ -239,7 +252,8 @@ def _run_spider(spider_name: str, query: dict) -> list[dict]:
         if not raw:
             return []
         return json.loads(raw)
-    except Exception:
+    except Exception as exc:
+        logger.exception("Spider %s failed for query %s: %s", spider_name, query, exc)
         return []
     finally:
         try:

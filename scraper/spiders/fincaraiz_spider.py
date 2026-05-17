@@ -6,7 +6,7 @@ import scrapy
 from scraper.normalizer import build_fincaraiz_search_url
 
 
-DETAIL_LINK_PATTERN = re.compile(r"/(?:apartamento|casa|apartaestudio)-en-arriendo-[^\"?#]+/\d+")
+DETAIL_LINK_PATTERN = re.compile(r"/(?:apartamento|casa|apartaestudio)-en-(?:arriendo|venta)-[^\"?#]+/\d+")
 
 
 class FincaRaizSpider(scrapy.Spider):
@@ -160,19 +160,24 @@ def _serialize_next_data_item(item: dict, response, query: dict) -> dict | None:
         "zone": zone,
         "neighborhood": zone,
         "property_type": technical_sheet.get("property_type_name") or (item.get("property_type") or {}).get("name"),
+        "operation": query.get("operation") or "rent",
         "price": (item.get("price") or {}).get("amount"),
         "bedrooms": _to_int(technical_sheet.get("bedrooms") or item.get("bedrooms")),
         "bathrooms": _to_int(technical_sheet.get("bathrooms") or item.get("bathrooms")),
+        "parking_spaces": _to_int(technical_sheet.get("parking") or technical_sheet.get("garages") or item.get("garages")),
+        "stratum": _to_int(technical_sheet.get("stratum") or technical_sheet.get("estrato")),
         "area_m2": _area_to_float(technical_sheet.get("m2Built") or technical_sheet.get("m2apto") or item.get("m2")),
         "source": "FincaRaiz",
         "url": response.urljoin(href),
         "image_url": image_url,
+        "image_urls": [str((image or {}).get("image")) for image in item.get("images") or [] if (image or {}).get("image")],
+        "raw_data": item,
     }
 
 
 def _extract_visible_card_items(response, query: dict):
     for card in response.css("div.listingCard")[:20]:
-        href = _detail_href(card.css("a[href*='-en-arriendo']::attr(href)").get())
+        href = _detail_href(card.css("a[href*='-en-arriendo']::attr(href), a[href*='-en-venta']::attr(href)").get())
         if not href:
             continue
 
@@ -194,6 +199,7 @@ def _extract_visible_card_items(response, query: dict):
             "zone": None,
             "neighborhood": None,
             "property_type": "apartamento" if "apartamento" in href else "casa",
+            "operation": query.get("operation") or "rent",
             "price_text": price,
             "bedrooms": _to_int(_match_first(r"(\d+)\s*(?:hab|habitacion)", typology_text.lower())),
             "bathrooms": _to_int(_match_first(r"(\d+)\s*(?:baño|ban[oó])", typology_text.lower())),
@@ -201,6 +207,7 @@ def _extract_visible_card_items(response, query: dict):
             "source": "FincaRaiz",
             "url": response.urljoin(href),
             "image_url": card.css("img::attr(src)").get(),
+            "image_urls": [url for url in [card.css("img::attr(src)").get()] if url],
         }
 
 
@@ -242,6 +249,7 @@ def _extract_detail_data(response) -> dict:
     return {
         "description": description,
         "features": _unique_texts([*feature_values, *json_features], limit=12),
+        "raw_text": page_text[:2000],
     }
 
 

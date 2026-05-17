@@ -16,7 +16,8 @@ class MetroCuadradoSpider(scrapy.Spider):
     def start_requests(self):
         city = quote_plus((self.query.get("city") or "Cartagena").lower())
         zone = quote_plus((self.query.get("zone") or self.query.get("neighborhood") or "").lower())
-        url = f"https://www.metrocuadrado.com/arriendo/{city}/{zone}/" if zone else f"https://www.metrocuadrado.com/arriendo/{city}/"
+        operation = "venta" if self.query.get("operation") == "sale" else "arriendo"
+        url = f"https://www.metrocuadrado.com/{operation}/{city}/{zone}/" if zone else f"https://www.metrocuadrado.com/{operation}/{city}/"
         yield scrapy.Request(url, callback=self.parse, dont_filter=True)
 
     def parse(self, response):
@@ -39,13 +40,18 @@ class MetroCuadradoSpider(scrapy.Spider):
                     "zone": item.get("mnombrecomunbarrio") or item.get("mbarrio"),
                     "neighborhood": item.get("mnombrecomunbarrio") or item.get("mbarrio"),
                     "property_type": (item.get("mtipoinmueble") or {}).get("nombre"),
+                    "operation": self.query.get("operation") or "rent",
                     "price": item.get("mvalorarriendo") or item.get("mvalorventa"),
                     "bedrooms": _to_int(item.get("mnrocuartos")),
                     "bathrooms": _to_int(item.get("mnrobanos")),
+                    "parking_spaces": _to_int(item.get("mnrogarajes")),
+                    "stratum": _to_int(item.get("mestrato")),
                     "area_m2": _to_float(item.get("marea") or item.get("mareac") or item.get("areaconstruida")),
                     "source": "Metrocuadrado",
                     "url": response.urljoin(item.get("link") or ""),
                     "image_url": item.get("imageLink"),
+                    "image_urls": [url for url in [item.get("imageLink")] if url],
+                    "raw_data": item,
                 }
                 yielded_count += 1
                 yield scrapy.Request(
@@ -74,6 +80,8 @@ class MetroCuadradoSpider(scrapy.Spider):
                 "source": "Metrocuadrado",
                 "url": response.urljoin(href) if href else response.url,
                 "image_url": card.css("img::attr(src)").get(),
+                "image_urls": [url for url in [card.css("img::attr(src)").get()] if url],
+                "operation": self.query.get("operation") or "rent",
             }
             yielded_count += 1
             yield scrapy.Request(
@@ -151,6 +159,7 @@ def _extract_detail_data(response) -> dict:
     return {
         "description": description,
         "features": _unique_texts(feature_values, limit=12),
+        "raw_text": page_text[:2000],
     }
 
 

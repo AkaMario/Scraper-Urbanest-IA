@@ -1,15 +1,15 @@
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
 import uvicorn
 
-from app.database import Base, engine, get_db
+from app.database import Base, SessionLocal, engine, get_db
 from app.models import ScrapingJob, SearchQuery
 from app.ollama_client import build_search_reply
 from app.routes.chat import router as chat_router
 from app.routes.properties import router as properties_router
 from app.schemas import AnalysisOut, JobOut, ParsedQuery, PropertyOut
+from app.services.property_store import ensure_property_storage
 from app.services.property_analyzer import analyze_properties
 from app.tasks.scraping_tasks import get_job_results
 
@@ -17,17 +17,11 @@ from app.tasks.scraping_tasks import get_job_results
 Base.metadata.create_all(bind=engine)
 
 
-def ensure_runtime_columns() -> None:
-    columns = {column["name"] for column in inspect(engine).get_columns("properties")}
-    if "features" in columns:
-        return
-
-    column_type = "JSON" if engine.dialect.name != "sqlite" else "TEXT"
-    with engine.begin() as connection:
-        connection.execute(text(f"ALTER TABLE properties ADD COLUMN features {column_type}"))
-
-
-ensure_runtime_columns()
+runtime_db = SessionLocal()
+try:
+    ensure_property_storage(runtime_db)
+finally:
+    runtime_db.close()
 
 app = FastAPI(title="Urbanest IA API", version="0.1.0")
 

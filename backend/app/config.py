@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     web_search_max_results: int = 4
     web_search_endpoint: str = "https://duckduckgo.com/html/"
     allowed_web_domains: str = "fincaraiz.com.co,metrocuadrado.com,olx.com.co,facebook.com"
+    embeddings_provider: str = "ollama"
+    embeddings_model: str = "nomic-embed-text"
+    embeddings_dimensions: int = 768
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

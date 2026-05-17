@@ -18,6 +18,7 @@ class ParsedQuery(BaseModel):
     zone: str | None = None
     neighborhood: str | None = None
     property_type: str | None = None
+    operation: str | None = None
     price_min: int | None = None
     price_max: int | None = None
     bedrooms: int | None = None
@@ -36,14 +37,21 @@ class PropertyOut(BaseModel):
     zone: str | None = None
     neighborhood: str | None = None
     property_type: str | None = None
+    operation: str = "rent"
     price: int
     bedrooms: int | None = None
     bathrooms: int | None = None
+    parking_spaces: int | None = None
+    stratum: int | None = None
     area_m2: float | None = None
     features: list[str] | None = Field(default_factory=list)
     source: str
     url: str
     image_url: str | None = None
+    image_urls: list[str] | None = Field(default_factory=list)
+    raw_text: str | None = None
+    status: str = "active"
+    last_seen_at: datetime | None = None
     scraped_at: datetime
 
 
@@ -54,14 +62,18 @@ class PropertyContext(BaseModel):
     zone: str | None = None
     neighborhood: str | None = None
     property_type: str | None = None
+    operation: str | None = None
     price: int | None = None
     bedrooms: int | None = None
     bathrooms: int | None = None
+    parking_spaces: int | None = None
+    stratum: int | None = None
     area_m2: float | None = None
     features: list[str] | None = Field(default_factory=list)
     source: str | None = None
     url: str | None = None
     image_url: str | None = None
+    image_urls: list[str] | None = Field(default_factory=list)
 
 
 class AnalysisOut(BaseModel):

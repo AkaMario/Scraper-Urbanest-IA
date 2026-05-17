@@ -88,8 +88,8 @@ def chat(request: ChatRequest, db: Session = Depends(get_db)):
         if not properties_context and is_greeting_message(request.message):
             return ChatResponse(
                 reply=(
-                    "Hola, soy Urbanest IA. Puedo buscar inmuebles en arriendo en Cartagena, "
-                    "comparar opciones y responder preguntas sobre las viviendas que encontremos."
+                    "Hola, soy Urbanest IA. Puedo buscar inmuebles en venta o arriendo en Cartagena y Barranquilla, "
+                    "comparar opciones y responder preguntas sobre las viviendas guardadas en la base de datos."
                 ),
                 parsed_query=request.parsed_query,
                 results=[],
@@ -129,7 +129,7 @@ def chat(request: ChatRequest, db: Session = Depends(get_db)):
                 )
             else:
                 reply = (
-                    "Puedo ayudarte con conceptos inmobiliarios, consejos para comparar arriendos o búsquedas concretas. "
+                    "Puedo ayudarte con conceptos inmobiliarios, consejos para comparar inmuebles o búsquedas concretas. "
                     "Para buscar, dime zona, presupuesto, tipo de inmueble y habitaciones."
                 )
             if web_requested and _is_unhelpful_refusal(reply):

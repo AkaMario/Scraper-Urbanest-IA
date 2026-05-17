@@ -52,6 +52,10 @@ SEARCH_HINTS = [
     "entre",
     "presupuesto",
     "cartagena",
+    "barranquilla",
+    "venta",
+    "comprar",
+    "compra",
 ]
 
 GREETING_MESSAGES = {
@@ -126,6 +130,18 @@ def _extract_property_type(message: str) -> str | None:
     )
 
 
+def _extract_city(message: str) -> str:
+    if "barranquilla" in message:
+        return "Barranquilla"
+    return "Cartagena"
+
+
+def _extract_operation(message: str) -> str:
+    if any(token in message for token in ("venta", "comprar", "compra", "comprando")):
+        return "sale"
+    return "rent"
+
+
 def _extract_sources(message: str) -> list[str]:
     lowered = message.lower()
     sources = []
@@ -170,10 +186,11 @@ def fallback_parse_query(message: str) -> dict[str, Any]:
             keywords.append(token)
 
     return {
-        "city": "Cartagena",
+        "city": _extract_city(lowered),
         "zone": zone,
         "neighborhood": zone,
         "property_type": property_type,
+        "operation": _extract_operation(lowered),
         "price_min": price_min,
         "price_max": price_max,
         "bedrooms": bedrooms,
@@ -207,6 +224,7 @@ def normalize_query_payload(payload: dict[str, Any]) -> dict[str, Any]:
     normalized = fallback_parse_query("")
     normalized.update({key: value for key, value in payload.items() if key in normalized})
     normalized["city"] = normalized.get("city") or "Cartagena"
+    normalized["operation"] = normalized.get("operation") or "rent"
     if _looks_like_source_location(normalized.get("zone")):
         normalized["zone"] = None
     if _looks_like_source_location(normalized.get("neighborhood")):
