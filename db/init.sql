@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS properties (
     raw_text TEXT,
     raw_data JSONB,
     status VARCHAR(30) NOT NULL DEFAULT 'active',
+    missing_count INTEGER NOT NULL DEFAULT 0,
     first_seen_at TIMESTAMP NOT NULL DEFAULT NOW(),
     last_seen_at TIMESTAMP NOT NULL DEFAULT NOW(),
     embedding vector(768),

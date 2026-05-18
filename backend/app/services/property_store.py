@@ -15,6 +15,7 @@ PROPERTY_COLUMNS = {
     "raw_text": "TEXT",
     "raw_data": "JSONB",
     "status": "VARCHAR(30) NOT NULL DEFAULT 'active'",
+    "missing_count": "INTEGER NOT NULL DEFAULT 0",
     "first_seen_at": "TIMESTAMP NOT NULL DEFAULT NOW()",
     "last_seen_at": "TIMESTAMP NOT NULL DEFAULT NOW()",
     "updated_at": "TIMESTAMP NOT NULL DEFAULT NOW()",
@@ -112,6 +113,7 @@ def normalize_for_storage(item: dict) -> dict:
         "raw_text": raw_text,
         "raw_data": item.get("raw_data") or item,
         "status": "active",
+        "missing_count": 0,
         "last_seen_at": now,
         "scraped_at": item.get("scraped_at") or now,
         "updated_at": now,
@@ -147,6 +149,7 @@ def upsert_property(db, item: dict) -> None:
                 raw_text = :raw_text,
                 raw_data = :raw_data,
                 status = 'active',
+                missing_count = 0,
                 last_seen_at = :last_seen_at,
                 scraped_at = :scraped_at,
                 updated_at = :updated_at,
@@ -167,12 +170,12 @@ def upsert_property(db, item: dict) -> None:
                 title, description, city, zone, neighborhood, property_type, operation,
                 price, bedrooms, bathrooms, parking_spaces, stratum, area_m2, features,
                 source, url, image_url, image_urls, raw_text, raw_data, status,
-                first_seen_at, last_seen_at, scraped_at, created_at, updated_at, embedding
+                missing_count, first_seen_at, last_seen_at, scraped_at, created_at, updated_at, embedding
             ) VALUES (
                 :title, :description, :city, :zone, :neighborhood, :property_type, :operation,
                 :price, :bedrooms, :bathrooms, :parking_spaces, :stratum, :area_m2, :features,
                 :source, :url, :image_url, :image_urls, :raw_text, :raw_data, :status,
-                NOW(), :last_seen_at, :scraped_at, NOW(), :updated_at, CAST(:embedding AS vector)
+                :missing_count, NOW(), :last_seen_at, :scraped_at, NOW(), :updated_at, CAST(:embedding AS vector)
             )
         """
     ).bindparams(
@@ -183,14 +186,27 @@ def upsert_property(db, item: dict) -> None:
     db.execute(stmt, payload)
 
 
-def mark_missing_properties_inactive(db, city: str, source: str, operation: str, seen_urls: set[str], started_at: datetime) -> None:
+def mark_missing_properties_inactive(
+    db,
+    city: str,
+    source: str,
+    operation: str,
+    seen_urls: set[str],
+    started_at: datetime,
+    missing_threshold: int = 3,
+) -> None:
     if not seen_urls:
         return
     db.execute(
         text(
             """
             UPDATE properties
-            SET status = 'inactive', updated_at = NOW()
+            SET missing_count = missing_count + 1,
+                status = CASE
+                    WHEN missing_count + 1 >= :missing_threshold THEN 'inactive'
+                    ELSE status
+                END,
+                updated_at = NOW()
             WHERE lower(city) = lower(:city)
               AND source = :source
               AND operation = :operation
@@ -199,5 +215,12 @@ def mark_missing_properties_inactive(db, city: str, source: str, operation: str,
               AND NOT (url = ANY(:seen_urls))
             """
         ),
-        {"city": city, "source": source, "operation": operation, "seen_urls": list(seen_urls), "started_at": started_at},
+        {
+            "city": city,
+            "source": source,
+            "operation": operation,
+            "seen_urls": list(seen_urls),
+            "started_at": started_at,
+            "missing_threshold": missing_threshold,
+        },
     )

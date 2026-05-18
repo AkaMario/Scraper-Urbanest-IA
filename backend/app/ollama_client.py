@@ -344,6 +344,36 @@ def build_search_reply(
     property_type = safe_query.get("property_type") or "inmuebles"
     total = len(safe_properties)
 
+    if safe_query.get("fallback_reason") == "no_exact_match":
+        price_max = safe_query.get("price_max")
+        nearby_zones = safe_query.get("nearby_offer_zones") or []
+        original_zone = safe_query.get("original_zone") or requested_zone or zone
+        if price_max:
+            message = (
+                f"No encontré resultados exactos para {original_zone} por debajo de {price_max:,} pesos. "
+                .replace(",", ".")
+            )
+        else:
+            message = f"No encontré resultados exactos para {original_zone} con esos filtros. "
+        if total:
+            scope = safe_query.get("fallback_scope") or "similar"
+            if scope == "city_same_type_similar_price":
+                message += f"Encontré {total} opción(es) similares en {city_scope}, del mismo tipo y con precio parecido. "
+            elif scope == "city_similar_price":
+                message += f"Encontré {total} opción(es) similares en {city_scope}, con precio parecido. "
+            else:
+                message += f"Encontré {total} opción(es) similares relajando algunos filtros. "
+        else:
+            message += "Tampoco encontré opciones similares suficientes en la base actual. "
+        if nearby_zones:
+            message += (
+                "Si quieres, puedo buscar en barrios cercanos como "
+                f"{', '.join(str(item) for item in nearby_zones)} manteniendo un presupuesto parecido."
+            )
+        else:
+            message += "Si quieres, puedo ampliar la zona o relajar el presupuesto."
+        return message
+
     if message and settings.enable_ollama_search_summaries:
         try:
             return generate_search_reply(

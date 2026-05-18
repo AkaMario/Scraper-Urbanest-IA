@@ -1,6 +1,7 @@
 import json
+import os
 import re
-from urllib.parse import quote_plus
+from urllib.parse import parse_qsl, quote_plus, urlencode, urlsplit, urlunsplit
 
 import scrapy
 
@@ -12,15 +13,18 @@ class MetroCuadradoSpider(scrapy.Spider):
     def __init__(self, query_json="{}", *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.query = json.loads(query_json)
+        self.max_pages = int(self.query.get("max_pages") or os.getenv("SCRAPER_MAX_PAGES", "40"))
+        self.seen_listing_urls: set[str] = set()
 
     def start_requests(self):
         city = quote_plus((self.query.get("city") or "Cartagena").lower())
         zone = quote_plus((self.query.get("zone") or self.query.get("neighborhood") or "").lower())
         operation = "venta" if self.query.get("operation") == "sale" else "arriendo"
         url = f"https://www.metrocuadrado.com/{operation}/{city}/{zone}/" if zone else f"https://www.metrocuadrado.com/{operation}/{city}/"
-        yield scrapy.Request(url, callback=self.parse, dont_filter=True)
+        yield scrapy.Request(url, callback=self.parse, meta={"page": 1}, dont_filter=True)
 
     def parse(self, response):
+        page = int(response.meta.get("page") or 1)
         yielded_count = 0
         script_chunks = re.findall(r"<script>(.*?)</script>", response.text, re.S)
         for chunk in script_chunks:
@@ -32,7 +36,7 @@ class MetroCuadradoSpider(scrapy.Spider):
             if not items:
                 continue
 
-            for item in items[:20]:
+            for item in items:
                 listing = {
                     "title": item.get("title") or "Inmueble en arriendo",
                     "description": item.get("sector") or item.get("subtitle") or item.get("title"),
@@ -53,6 +57,9 @@ class MetroCuadradoSpider(scrapy.Spider):
                     "image_urls": [url for url in [item.get("imageLink")] if url],
                     "raw_data": item,
                 }
+                if not listing["url"] or listing["url"] in self.seen_listing_urls:
+                    continue
+                self.seen_listing_urls.add(listing["url"])
                 yielded_count += 1
                 yield scrapy.Request(
                     listing["url"],
@@ -61,11 +68,11 @@ class MetroCuadradoSpider(scrapy.Spider):
                     meta={"listing": listing},
                     dont_filter=True,
                 )
-                if yielded_count >= 12:
-                    return
+            if yielded_count > 0 and page < self.max_pages:
+                yield scrapy.Request(_next_page_url(response.url, page + 1), callback=self.parse, meta={"page": page + 1}, dont_filter=True)
             return
 
-        for card in response.css("article, div[class*='property']")[:10]:
+        for card in response.css("article, div[class*='property']"):
             title = "".join(card.css("h2 *::text, h3 *::text").getall()).strip()
             href = card.css("a::attr(href)").get()
             listing = {
@@ -83,6 +90,9 @@ class MetroCuadradoSpider(scrapy.Spider):
                 "image_urls": [url for url in [card.css("img::attr(src)").get()] if url],
                 "operation": self.query.get("operation") or "rent",
             }
+            if not listing["url"] or listing["url"] in self.seen_listing_urls:
+                continue
+            self.seen_listing_urls.add(listing["url"])
             yielded_count += 1
             yield scrapy.Request(
                 listing["url"],
@@ -91,8 +101,9 @@ class MetroCuadradoSpider(scrapy.Spider):
                 meta={"listing": listing},
                 dont_filter=True,
             )
-            if yielded_count >= 12:
-                return
+
+        if yielded_count > 0 and page < self.max_pages:
+            yield scrapy.Request(_next_page_url(response.url, page + 1), callback=self.parse, meta={"page": page + 1}, dont_filter=True)
 
     def parse_detail(self, response):
         listing = response.meta["listing"]
@@ -199,3 +210,11 @@ def _extract_results_array(decoded_text: str):
                     return []
 
     return []
+
+
+def _next_page_url(url: str, page: int) -> str:
+    parts = urlsplit(url)
+    query = dict(parse_qsl(parts.query, keep_blank_values=True))
+    query["page"] = str(page)
+    query["pagina"] = str(page)
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))

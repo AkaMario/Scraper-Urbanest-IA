@@ -12,6 +12,7 @@ PROPERTY_TYPES = {
     "casa": "casa",
     "casas": "casa",
     "apartaestudio": "apartaestudio",
+    "apartaestudios": "apartaestudio",
     "local": "local",
 }
 
@@ -168,6 +169,7 @@ def fallback_parse_query(message: str) -> dict[str, Any]:
 
     bedrooms = _extract_first_int(r"(\d+)\s*habitacion", lowered) or _extract_first_int(r"(\d+)\s*alcoba", lowered)
     bathrooms = _extract_first_int(r"(\d+)\s*ba", lowered)
+    parking_spaces = 1 if "parqueadero" in lowered or "garaje" in lowered else None
 
     if "hasta" in lowered and prices:
         price_min, price_max = None, prices[-1]
@@ -181,9 +183,11 @@ def fallback_parse_query(message: str) -> dict[str, Any]:
         price_min, price_max = None, None
 
     keywords = []
-    for token in ["arriendo", "amoblado", "balcon", "vista al mar", "parqueadero", "mascotas"]:
+    for token in ["arriendo", "amoblado", "amoblados", "balcon", "vista al mar", "parqueadero", "mascotas"]:
         if token in lowered:
-            keywords.append(token)
+            keyword = "amoblado" if token == "amoblados" else token
+            if keyword not in keywords:
+                keywords.append(keyword)
 
     return {
         "city": _extract_city(lowered),
@@ -195,6 +199,7 @@ def fallback_parse_query(message: str) -> dict[str, Any]:
         "price_max": price_max,
         "bedrooms": bedrooms,
         "bathrooms": bathrooms,
+        "parking_spaces": parking_spaces,
         "keywords": keywords,
         "sources": _extract_sources(lowered),
     }
@@ -213,6 +218,7 @@ def should_skip_ollama_for_query(message: str, fallback_payload: dict[str, Any])
         fallback_payload.get("price_max"),
         fallback_payload.get("bedrooms"),
         fallback_payload.get("bathrooms"),
+        fallback_payload.get("parking_spaces"),
     ]
     if any(value is not None for value in extracted_signals):
         return True
@@ -260,6 +266,8 @@ def apply_message_overrides(payload: dict[str, Any], message: str, fallback_payl
         normalized["bedrooms"] = None
     if fallback_payload.get("bathrooms") is None and not re.search(r"\d+\s*(baño|baños|bano|banos)", lowered):
         normalized["bathrooms"] = None
+    if fallback_payload.get("parking_spaces") is None and "parqueadero" not in lowered and "garaje" not in lowered:
+        normalized["parking_spaces"] = None
     return normalized
 
 
@@ -311,6 +319,8 @@ def has_concrete_search_filters(message: str) -> bool:
         or re.search(r"\$\s*[\d\.]+|\d{6,8}", lowered)
         or any(candidate in lowered for candidate in ZONE_CANDIDATES)
         or _extract_property_type(lowered)
+        or "parqueadero" in lowered
+        or "garaje" in lowered
     )
 
 

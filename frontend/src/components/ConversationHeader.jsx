@@ -1,14 +1,19 @@
 function ConversationHeader({ loading, jobId, resultCount }) {
   return (
-    <header className="sticky top-0 z-10 border-b border-white/5 bg-[#343541]/90 backdrop-blur">
-      <div className="mx-auto flex max-w-3xl flex-col gap-3 px-4 py-3 sm:px-6 md:flex-row md:items-center md:justify-between md:py-4">
+    <header className="sticky top-0 z-10 bg-black/80 backdrop-blur-xl">
+      {/* <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3 sm:px-6">
         <div className="min-w-0 pr-24 md:pr-0">
-          <p className="truncate text-[10px] uppercase tracking-[0.22em] text-slate-500 sm:text-xs sm:tracking-[0.28em]">
-            Powered by DNAMYK
+          <h2 className="truncate text-lg font-semibold tracking-tight text-zinc-100">Urbanest IA</h2>
+          <p className="mt-0.5 hidden text-xs text-zinc-500 sm:block">
+            {loading ? "Consultando base inmobiliaria" : resultCount > 0 ? `${resultCount} inmuebles en contexto` : "Asistente inmobiliario para la costa colombiana"}
           </p>
-          <h2 className="mt-1 text-lg font-semibold text-white">Urbanest IA</h2>
         </div>
-      </div>
+        {jobId ? (
+          <span className="hidden rounded-full border border-white/10 px-3 py-1 text-xs text-zinc-400 sm:inline-flex">
+            Job #{jobId}
+          </span>
+        ) : null}
+      </div> */}
     </header>
   );
 }

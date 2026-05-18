@@ -6,6 +6,8 @@ Guia rapida para ejecutar el scraping manual, revisar si termino y verificar dat
 
 El proyecto tiene `celery_beat` configurado para ejecutar el inventario de propiedades automaticamente todos los dias a las `03:00 AM` hora Colombia.
 
+El inventario no solo consulta la ciudad completa. Tambien consulta barrios principales de Cartagena y Barranquilla para evitar que los portales devuelvan solo el primer lote de resultados de una busqueda muy amplia.
+
 Servicios involucrados:
 
 - `celery_beat`: programa la tarea diaria.
@@ -27,6 +29,34 @@ El comando devuelve un ID de tarea parecido a:
 ```
 
 Ese ID confirma que la tarea fue enviada al worker.
+
+## Controlar Profundidad Del Scraping
+
+Variables disponibles en `.env` o en la terminal antes de levantar Docker:
+
+```text
+SCRAPER_MAX_PAGES=40
+SCRAPER_ZONE_MAX_PAGES=3
+MISSING_INACTIVE_THRESHOLD=3
+```
+
+Significado:
+
+- `SCRAPER_MAX_PAGES`: paginas maximas para la busqueda amplia por ciudad.
+- `SCRAPER_ZONE_MAX_PAGES`: paginas maximas por cada barrio.
+- `MISSING_INACTIVE_THRESHOLD`: cantidad de scrapes consecutivos en los que una propiedad debe faltar antes de marcarse como `inactive`.
+
+Si quieres intentar traer mas resultados, sube `SCRAPER_ZONE_MAX_PAGES`, por ejemplo:
+
+```text
+SCRAPER_ZONE_MAX_PAGES=5
+```
+
+Luego reinicia Celery:
+
+```bash
+docker compose restart celery_worker celery_beat
+```
 
 ## Saber Si El Scraping Sigue Activo
 
@@ -123,4 +153,23 @@ Password: urbanest
 - Si `inspect active` muestra `empty`, el scraping ya termino o no hay tarea corriendo.
 - Si la tabla `properties` queda vacia, revisa `docker compose logs -f celery_worker`.
 - El warning de SQLAlchemy sobre tipo `vector` no es necesariamente un error; Postgres si reconoce `pgvector`.
-- Los inmuebles desaparecidos del portal se marcan como `inactive` cuando el refresco diario encuentra datos para esa fuente y ciudad.
+- Los inmuebles desaparecidos del portal no se marcan como `inactive` inmediatamente. Primero sube `missing_count`.
+- Si una propiedad vuelve a aparecer, queda `active` y `missing_count` vuelve a `0`.
+- Por defecto una propiedad se marca como `inactive` despues de faltar en `3` scrapes confiables consecutivos.
+- Para evitar falsos inactivos, el sistema no marca masivamente como `inactive` si una fuente devolvio muy pocos resultados frente a lo que ya habia activo.
+
+
+## Extra
+- Para monitorear:
+    docker compose exec celery_worker celery -A app.tasks.celery_app.celery inspect active
+
+- Para ver conteos:
+    docker compose exec postgres psql -U urbanest -d urbanest -c "SELECT city, operation, source, COUNT(*) FROM properties WHERE status='active' GROUP BY city, operation, source ORDER BY city, operation, source;"
+
+- Ahora puedes lanzar por separado:
+    docker compose exec celery_worker celery -A app.tasks.celery_app.celery call app.tasks.scraping_tasks.refresh_property_inventory --kwargs='{"city":"Cartagena","operation":"rent"}'
+
+    docker compose exec celery_worker celery -A app.tasks.celery_app.celery call app.tasks.scraping_tasks.refresh_property_inventory --kwargs='{"city":"Cartagena","operation":"sale"}'
+    
+- O todo completo:
+    docker compose exec celery_worker celery -A app.tasks.celery_app.celery call app.tasks.scraping_tasks.refresh_property_inventory

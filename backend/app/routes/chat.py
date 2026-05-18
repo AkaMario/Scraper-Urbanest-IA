@@ -1,5 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
+import re
+import unicodedata
 
 from app.database import get_db
 from app.models import ScrapingJob, SearchQuery
@@ -9,7 +11,8 @@ from app.services.domain_knowledge import (
     build_real_estate_concept_answer,
     is_real_estate_concept_question,
 )
-from app.services.query_parser import has_concrete_search_filters, is_greeting_message, is_search_request
+from app.services.cartagena_locations import normalize_neighborhood
+from app.services.query_parser import fallback_parse_query, has_concrete_search_filters, is_greeting_message, is_search_request
 from app.services.web_context import (
     build_function_answer,
     build_web_context,
@@ -22,6 +25,99 @@ from app.tasks.scraping_tasks import process_search_request
 
 
 router = APIRouter(prefix="/api", tags=["chat"])
+
+
+POSITIVE_NEARBY_PATTERNS = (
+    "si",
+    "si busca",
+    "sí",
+    "sí busca",
+    "dale",
+    "ok",
+    "okay",
+    "hazlo",
+    "busca",
+    "buscalos",
+    "búscalos",
+    "busca en barrios cercanos",
+)
+
+QUESTION_STARTERS = (
+    "que",
+    "qué",
+    "cuanto",
+    "cuánto",
+    "cual",
+    "cuál",
+    "como",
+    "cómo",
+    "donde",
+    "dónde",
+    "por que",
+    "por qué",
+)
+
+
+def _normalize_intent_text(value: str) -> str:
+    normalized = unicodedata.normalize("NFKD", value.lower())
+    normalized = "".join(char for char in normalized if not unicodedata.combining(char))
+    return re.sub(r"[^a-z0-9\s]+", " ", normalized).strip()
+
+
+def _is_positive_nearby_followup(message: str, parsed_query: dict | None) -> bool:
+    if not parsed_query or not parsed_query.get("allow_nearby_followup") or not parsed_query.get("nearby_offer_zones"):
+        return False
+    normalized = _normalize_intent_text(message)
+    if not normalized:
+        return False
+    if normalized.startswith(QUESTION_STARTERS) and not any(token in normalized for token in ("busca", "dale", "hazlo")):
+        return False
+    return any(normalized == pattern or normalized.startswith(f"{pattern} ") for pattern in POSITIVE_NEARBY_PATTERNS)
+
+
+def _build_nearby_followup_query(message: str, parsed_query: dict) -> dict:
+    overrides = fallback_parse_query(message)
+    normalized_message = _normalize_intent_text(message)
+    next_query = dict(parsed_query)
+    nearby_zones = [str(zone) for zone in parsed_query.get("nearby_offer_zones") or [] if str(zone).strip()]
+    next_query.update(
+        {
+            "zone": None,
+            "neighborhood": None,
+            "accepted_zones": nearby_zones,
+            "nearby_zones_checked": nearby_zones,
+            "location_match_scope": "nearby",
+            "fallback_reason": None,
+            "fallback_scope": None,
+            "allow_nearby_followup": False,
+            "__preset": True,
+        }
+    )
+    property_terms = ("apartamento", "apartamentos", "apartaestudio", "apartaestudios", "casa", "casas", "local")
+    if any(term in normalized_message for term in property_terms) and overrides.get("property_type") is not None:
+        next_query["property_type"] = overrides["property_type"]
+    if any(term in normalized_message for term in ("venta", "comprar", "compra", "arriendo", "alquiler")):
+        next_query["operation"] = overrides.get("operation") or next_query.get("operation")
+    for key, pattern in (
+        ("price_min", r"\d|\$|millon|millones|mil"),
+        ("price_max", r"\d|\$|millon|millones|mil"),
+        ("bedrooms", r"habitacion|habitaciones|alcoba|alcobas"),
+        ("bathrooms", r"bano|banos|baño|baños"),
+        ("parking_spaces", r"parqueadero|garaje"),
+    ):
+        if re.search(pattern, normalized_message) and overrides.get(key) is not None:
+            next_query[key] = overrides[key]
+    keywords = set(next_query.get("keywords") or [])
+    keywords.update(overrides.get("keywords") or [])
+    next_query["keywords"] = sorted(keyword for keyword in keywords if keyword)
+    explicit_zone = normalize_neighborhood(message)
+    if explicit_zone and explicit_zone != parsed_query.get("original_zone"):
+        next_query["zone"] = explicit_zone
+        next_query["neighborhood"] = explicit_zone
+        next_query["accepted_zones"] = []
+        next_query["nearby_zones_checked"] = []
+        next_query["location_match_scope"] = "exact"
+    return next_query
 
 
 def _compose_followup_search_message(message: str, parsed_query: dict | None) -> str:
@@ -72,6 +168,29 @@ def chat(request: ChatRequest, db: Session = Depends(get_db)):
     properties_context = [item.model_dump() for item in request.properties]
     parsed_query_context = request.parsed_query.model_dump() if request.parsed_query else None
     analysis_context = request.analysis.model_dump() if request.analysis else None
+
+    if _is_positive_nearby_followup(request.message, parsed_query_context):
+        nearby_query = _build_nearby_followup_query(request.message, parsed_query_context)
+        search_query = SearchQuery(
+            user_message=request.message,
+            parsed_query_json=nearby_query,
+        )
+        db.add(search_query)
+        db.commit()
+        db.refresh(search_query)
+
+        job = ScrapingJob(query_id=search_query.id, status="pending")
+        db.add(job)
+        db.commit()
+        db.refresh(job)
+
+        process_search_request.delay(job.id, search_query.id, request.message)
+        return ChatResponse(
+            reply="Voy a buscar en barrios cercanos manteniendo un presupuesto parecido.",
+            parsed_query=None,
+            results=[],
+            job_id=job.id,
+        )
 
     should_route_to_chat = not is_search_request(request.message)
 

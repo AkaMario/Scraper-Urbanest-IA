@@ -36,7 +36,7 @@ function buildSearchLine(parsedQuery) {
 function MetricCard({ label, value, accent = "slate" }) {
   const accentStyles = {
     slate: "border-white/10 bg-white/[0.04] text-white",
-    emerald: "border-emerald-400/20 bg-emerald-400/10 text-emerald-200",
+    emerald: "border-white/10 bg-white text-black",
     amber: "border-amber-300/20 bg-amber-300/10 text-amber-100",
   };
 
@@ -63,15 +63,15 @@ function MarketSnapshot({ parsedQuery, analysis, results, loading, compact = fal
   const scopeLabel = requestedZone || parsedQuery?.city || "Cartagena";
 
   return (
-    <section className="overflow-hidden rounded-[24px] border border-white/10 bg-[radial-gradient(circle_at_top_left,_rgba(16,185,129,0.16),_transparent_34%),linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.02))] sm:rounded-[30px]">
+    <section className="overflow-hidden rounded-[24px] border border-white/10 bg-[#111] sm:rounded-[30px]">
       <div className={`${compact ? "p-3 sm:p-4" : "p-4 sm:p-5"}`}>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
-            <p className="text-[10px] uppercase tracking-[0.2em] text-emerald-300/80 sm:text-[11px] sm:tracking-[0.28em]">Radar de mercado</p>
+            <p className="text-[10px] uppercase tracking-[0.2em] text-zinc-500 sm:text-[11px] sm:tracking-[0.28em]">Radar de mercado</p>
             <h3 className="mt-2 text-lg font-semibold text-white sm:text-xl">
               {loading ? "Leyendo la consulta en tiempo real" : "Panorama de la busqueda"}
             </h3>
-            <p className="mt-2 max-w-xl text-sm leading-6 text-slate-300">
+            <p className="mt-2 max-w-xl text-sm leading-6 text-zinc-300">
               {loading
                 ? "Estoy convirtiendo tu mensaje en criterios de mercado y preparando resultados comparables."
                 : buildSearchLine(parsedQuery)}
@@ -100,9 +100,9 @@ function MarketSnapshot({ parsedQuery, analysis, results, loading, compact = fal
         </div>
 
         <div className="mt-5 grid gap-3 lg:grid-cols-[1.25fr_0.95fr]">
-          <div className="rounded-[20px] border border-white/10 bg-black/20 p-3 sm:rounded-[24px] sm:p-4">
-            <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500 sm:text-[11px] sm:tracking-[0.24em]">Lectura rapida</p>
-            <p className="mt-3 text-sm leading-7 text-slate-200">
+          <div className="rounded-[20px] border border-white/10 bg-black p-3 sm:rounded-[24px] sm:p-4">
+            <p className="text-[10px] uppercase tracking-[0.2em] text-zinc-500 sm:text-[11px] sm:tracking-[0.24em]">Lectura rapida</p>
+            <p className="mt-3 text-sm leading-7 text-zinc-200">
               {loading
                 ? "Todavia no hay lectura final porque sigo esperando anuncios y precios comparables."
                 : resultCount === 0
@@ -111,9 +111,9 @@ function MarketSnapshot({ parsedQuery, analysis, results, loading, compact = fal
             </p>
           </div>
 
-          <div className="rounded-[20px] border border-emerald-400/15 bg-emerald-400/8 p-3 sm:rounded-[24px] sm:p-4">
-            <p className="text-[10px] uppercase tracking-[0.2em] text-emerald-300 sm:text-[11px] sm:tracking-[0.24em]">Foco sugerido</p>
-            <p className="mt-3 text-sm leading-7 text-slate-100">
+          <div className="rounded-[20px] border border-white/10 bg-black p-3 sm:rounded-[24px] sm:p-4">
+            <p className="text-[10px] uppercase tracking-[0.2em] text-zinc-500 sm:text-[11px] sm:tracking-[0.24em]">Foco sugerido</p>
+            <p className="mt-3 text-sm leading-7 text-zinc-100">
               {opportunity
                 ? `${opportunity.title} aparece como la señal mas atractiva del lote, con precio de ${formatCurrency(opportunity.price)} en ${opportunity.zone || opportunity.neighborhood || "Cartagena"}.`
                 : loading

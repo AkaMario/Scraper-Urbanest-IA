@@ -1,12 +1,13 @@
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import logging
+import os
 
 from sqlalchemy import and_, func, or_, select, text
 
 from app.database import SessionLocal
 from app.models import Property, ScrapingJob, SearchQuery
-from app.services.cartagena_locations import location_search_terms, nearby_neighborhoods
+from app.services.cartagena_locations import NEIGHBORHOOD_ALIASES, location_search_terms, nearby_neighborhoods
 from app.services.property_analyzer import analyze_properties
 from app.services.embeddings import generate_embedding, to_pgvector_literal
 from app.services.property_store import ensure_property_storage, mark_missing_properties_inactive, upsert_property
@@ -18,6 +19,30 @@ from .celery_app import celery
 
 ACTIVE_PROPERTY_SOURCES = ("FincaRaiz", "Metrocuadrado")
 logger = logging.getLogger(__name__)
+MISSING_INACTIVE_THRESHOLD = int(os.getenv("MISSING_INACTIVE_THRESHOLD", "3"))
+
+BARRANQUILLA_NEIGHBORHOODS = (
+    "Alto Prado",
+    "Villa Santos",
+    "Riomar",
+    "Buenavista",
+    "El Golf",
+    "Ciudad Jardin",
+    "La Campina",
+    "Miramar",
+    "Villa Carolina",
+    "Paraiso",
+    "Boston",
+    "El Prado",
+    "Las Delicias",
+    "La Concepcion",
+    "El Recreo",
+    "Colombia",
+    "Los Andes",
+    "San Vicente",
+    "Altos de Riomar",
+    "La Castellana",
+)
 
 
 def _zone_like(value: str) -> str:
@@ -52,6 +77,17 @@ def _run_search_scope(parsed_query: dict) -> list[dict]:
 def _property_filters(stmt, parsed_query: dict, strict: bool = True):
     city = parsed_query.get("city") or "Cartagena"
     stmt = stmt.where(func.lower(Property.city) == city.lower(), Property.status == "active")
+    location_term = _primary_location_term(parsed_query)
+    if location_term:
+        location_like = _zone_like(location_term)
+        stmt = stmt.where(
+            or_(
+                func.lower(Property.zone).like(location_like),
+                func.lower(Property.neighborhood).like(location_like),
+                func.lower(Property.title).like(location_like),
+                func.lower(Property.description).like(location_like),
+            )
+        )
     if parsed_query.get("operation"):
         stmt = stmt.where(Property.operation == parsed_query["operation"])
     if parsed_query.get("property_type") and strict:
@@ -64,50 +100,209 @@ def _property_filters(stmt, parsed_query: dict, strict: bool = True):
         stmt = stmt.where(Property.bedrooms >= int(parsed_query["bedrooms"]))
     if parsed_query.get("bathrooms") and strict:
         stmt = stmt.where(Property.bathrooms >= int(parsed_query["bathrooms"]))
+    if parsed_query.get("parking_spaces") and strict:
+        stmt = stmt.where(or_(Property.parking_spaces >= int(parsed_query["parking_spaces"]), Property.parking_spaces.is_(None)))
     return stmt
 
 
-def search_saved_properties(db, parsed_query: dict, user_message: str, limit: int = 24) -> list[Property]:
-    embedding = to_pgvector_literal(generate_embedding(user_message))
-    if db.bind.dialect.name == "postgresql" and embedding:
-        base_sql = """
-            SELECT * FROM properties
-            WHERE lower(city) = lower(:city)
-              AND status = 'active'
-              AND (:operation IS NULL OR operation = :operation)
-              AND (:property_type IS NULL OR lower(property_type) = lower(:property_type))
-              AND (:price_min IS NULL OR price >= :price_min)
-              AND (:price_max IS NULL OR price <= :price_max)
-              AND (:bedrooms IS NULL OR bedrooms >= :bedrooms OR bedrooms IS NULL)
-              AND (:bathrooms IS NULL OR bathrooms >= :bathrooms OR bathrooms IS NULL)
-              AND embedding IS NOT NULL
-            ORDER BY embedding <=> CAST(:embedding AS vector)
-            LIMIT :limit
-        """
-        rows = db.execute(
+def _primary_location_term(parsed_query: dict) -> str | None:
+    accepted_zones = parsed_query.get("accepted_zones") or location_search_terms(
+        parsed_query.get("zone") or parsed_query.get("neighborhood")
+    )
+    return str(accepted_zones[0]).strip().lower() if accepted_zones else None
+
+
+def _location_terms(parsed_query: dict) -> list[str]:
+    accepted_zones = parsed_query.get("accepted_zones") or location_search_terms(
+        parsed_query.get("zone") or parsed_query.get("neighborhood")
+    )
+    return [str(zone).strip().lower() for zone in accepted_zones if str(zone).strip()]
+
+
+def _price_window_query(parsed_query: dict, margin: float = 0.10) -> dict:
+    query = dict(parsed_query)
+    reference_price = query.get("price_max") or query.get("price_min")
+    if reference_price:
+        reference_price = int(reference_price)
+        query["price_min"] = int(reference_price * (1 - margin))
+        query["price_max"] = int(reference_price * (1 + margin))
+    return query
+
+
+def _semantic_property_search(
+    db,
+    parsed_query: dict,
+    embedding: str,
+    *,
+    strict: bool,
+    require_location: bool,
+    limit: int,
+) -> list[Property]:
+    location_terms = _location_terms(parsed_query) if require_location else []
+    location_likes = [f"%{term}%" for term in location_terms]
+    base_sql = """
+        SELECT * FROM properties
+        WHERE lower(city) = lower(:city)
+          AND status = 'active'
+          AND (:operation IS NULL OR operation = :operation)
+          AND (:require_location IS FALSE OR lower(coalesce(zone, '')) LIKE ANY(:location_likes)
+            OR lower(coalesce(neighborhood, '')) LIKE ANY(:location_likes)
+            OR lower(coalesce(title, '')) LIKE ANY(:location_likes)
+            OR lower(coalesce(description, '')) LIKE ANY(:location_likes))
+          AND (:strict_filters IS FALSE OR :property_type IS NULL OR lower(property_type) = lower(:property_type))
+          AND (:strict_filters IS FALSE OR :price_min IS NULL OR price >= :price_min)
+          AND (:strict_filters IS FALSE OR :price_max IS NULL OR price <= :price_max)
+          AND (:strict_filters IS FALSE OR :bedrooms IS NULL OR bedrooms >= :bedrooms OR bedrooms IS NULL)
+          AND (:strict_filters IS FALSE OR :bathrooms IS NULL OR bathrooms >= :bathrooms OR bathrooms IS NULL)
+          AND (:strict_filters IS FALSE OR :parking_spaces IS NULL OR parking_spaces >= :parking_spaces OR parking_spaces IS NULL)
+          AND embedding IS NOT NULL
+        ORDER BY
+          CASE
+            WHEN :strict_filters IS FALSE AND :price_max IS NOT NULL THEN abs(price - :price_max)
+            ELSE 0
+          END ASC,
+          embedding <=> CAST(:embedding AS vector)
+        LIMIT :limit
+    """
+    return list(
+        db.execute(
             select(Property).from_statement(text(base_sql)),
             {
                 "city": parsed_query.get("city") or "Cartagena",
                 "operation": parsed_query.get("operation"),
+                "require_location": bool(require_location and location_likes),
+                "location_likes": location_likes or ["%%"],
+                "strict_filters": strict,
                 "property_type": parsed_query.get("property_type"),
                 "price_min": parsed_query.get("price_min"),
                 "price_max": parsed_query.get("price_max"),
                 "bedrooms": parsed_query.get("bedrooms"),
                 "bathrooms": parsed_query.get("bathrooms"),
+                "parking_spaces": parsed_query.get("parking_spaces"),
                 "embedding": embedding,
                 "limit": limit,
             },
         ).scalars().all()
+    )
+
+
+def search_saved_properties_with_meta(db, parsed_query: dict, user_message: str, limit: int = 24) -> tuple[list[Property], dict]:
+    embedding = to_pgvector_literal(generate_embedding(user_message))
+    requested_zone = parsed_query.get("zone") or parsed_query.get("neighborhood") or parsed_query.get("original_zone")
+    nearby_zones = nearby_neighborhoods(requested_zone) if requested_zone else []
+    meta = {
+        "exact_result_count": 0,
+        "fallback_reason": None,
+        "fallback_scope": None,
+        "nearby_offer_zones": nearby_zones,
+        "allow_nearby_followup": bool(requested_zone and nearby_zones),
+        "original_zone": requested_zone,
+    }
+    if db.bind.dialect.name == "postgresql" and embedding:
+        rows = _semantic_property_search(db, parsed_query, embedding, strict=True, require_location=True, limit=limit)
         if rows:
-            return list(rows)
+            meta["exact_result_count"] = len(rows)
+            meta["fallback_scope"] = "exact"
+            return rows, meta
+
+        similar_query = _price_window_query(parsed_query)
+        rows = _semantic_property_search(db, similar_query, embedding, strict=True, require_location=False, limit=limit)
+        if rows:
+            meta["fallback_reason"] = "no_exact_match"
+            meta["fallback_scope"] = "city_same_type_similar_price"
+            return rows, meta
+
+        rows = _semantic_property_search(db, similar_query, embedding, strict=False, require_location=False, limit=limit)
+        if rows:
+            meta["fallback_reason"] = "no_exact_match"
+            meta["fallback_scope"] = "city_similar_price"
+            return rows, meta
 
     stmt = _property_filters(select(Property), parsed_query).order_by(Property.last_seen_at.desc()).limit(limit)
     rows = list(db.execute(stmt).scalars().all())
     if rows:
-        return rows
+        meta["exact_result_count"] = len(rows)
+        meta["fallback_scope"] = "exact"
+        return rows, meta
 
     fallback_stmt = _property_filters(select(Property), parsed_query, strict=False).order_by(Property.last_seen_at.desc()).limit(limit)
-    return list(db.execute(fallback_stmt).scalars().all())
+    rows = list(db.execute(fallback_stmt).scalars().all())
+    if rows:
+        meta["fallback_reason"] = "no_exact_match"
+        meta["fallback_scope"] = "location_relaxed_filters"
+    return rows, meta
+
+
+def search_saved_properties(db, parsed_query: dict, user_message: str, limit: int = 24) -> list[Property]:
+    rows, _meta = search_saved_properties_with_meta(db, parsed_query, user_message, limit)
+    return rows
+
+
+def _active_source_count(db, city: str, source: str, operation: str) -> int:
+    return int(
+        db.execute(
+            select(func.count(Property.id)).where(
+                func.lower(Property.city) == city.lower(),
+                Property.source == source,
+                Property.operation == operation,
+                Property.status == "active",
+            )
+        ).scalar()
+        or 0
+    )
+
+
+def _should_mark_inactive(db, city: str, source: str, operation: str, seen_urls: set[str]) -> bool:
+    if not seen_urls:
+        return False
+    active_count = _active_source_count(db, city, source, operation)
+    if active_count == 0:
+        return True
+    minimum_safe_count = max(20, int(active_count * 0.8))
+    if len(seen_urls) < minimum_safe_count:
+        logger.warning(
+            "Skipping inactive marking for %s %s %s: seen %s active %s",
+            city,
+            operation,
+            source,
+            len(seen_urls),
+            active_count,
+        )
+        return False
+    return True
+
+
+def _inventory_zones_for_city(city: str) -> list[str]:
+    if city.lower() == "cartagena":
+        return sorted(set(NEIGHBORHOOD_ALIASES.values()))
+    if city.lower() == "barranquilla":
+        return list(BARRANQUILLA_NEIGHBORHOODS)
+    return []
+
+
+def _inventory_queries(city: str, operation: str) -> list[dict]:
+    max_pages = int(os.getenv("SCRAPER_MAX_PAGES", "40"))
+    zone_max_pages = int(os.getenv("SCRAPER_ZONE_MAX_PAGES", "3"))
+    queries = [
+        {
+            "city": city,
+            "operation": operation,
+            "sources": list(ACTIVE_PROPERTY_SOURCES),
+            "max_pages": max_pages,
+        }
+    ]
+    for zone in _inventory_zones_for_city(city):
+        queries.append(
+            {
+                "city": city,
+                "zone": zone,
+                "neighborhood": zone,
+                "operation": operation,
+                "sources": list(ACTIVE_PROPERTY_SOURCES),
+                "max_pages": zone_max_pages,
+            }
+        )
+    return queries
 
 
 def _search_with_nearby_fallback(parsed_query: dict) -> list[dict]:
@@ -168,14 +363,20 @@ def process_search_request(job_id: int, query_id: int, user_message: str) -> dic
         job.error_message = None
         db.commit()
 
-        parsed_query, parser_used = parse_user_query(user_message)
+        search_query = db.get(SearchQuery, query_id)
+        preset_query = (search_query.parsed_query_json if search_query else {}) or {}
+        if preset_query.get("__preset"):
+            parsed_query = {key: value for key, value in preset_query.items() if key != "__preset"}
+            parser_used = "preset-followup"
+        else:
+            parsed_query, parser_used = parse_user_query(user_message)
         job.status = "searching_database"
         db.commit()
 
         _ensure_property_detail_columns(db)
-        saved_results = search_saved_properties(db, parsed_query, user_message)
+        saved_results, search_meta = search_saved_properties_with_meta(db, parsed_query, user_message)
+        parsed_query.update(search_meta)
 
-        search_query = db.get(SearchQuery, query_id)
         if search_query:
             search_query.parsed_query_json = parsed_query
             db.commit()
@@ -270,10 +471,10 @@ def get_job_results(db, job_id: int) -> list[Property]:
     return list(db.execute(stmt.order_by(Property.scraped_at.desc())).scalars().all())
 
 
-@celery.task(name="app.tasks.scraping_tasks.refresh_property_inventory", soft_time_limit=3300, time_limit=3600)
-def refresh_property_inventory() -> dict:
-    cities = ("Cartagena", "Barranquilla")
-    operations = ("rent", "sale")
+@celery.task(name="app.tasks.scraping_tasks.refresh_property_inventory", soft_time_limit=21000, time_limit=21600)
+def refresh_property_inventory(city: str | None = None, operation: str | None = None) -> dict:
+    cities = (city,) if city else ("Cartagena", "Barranquilla")
+    operations = (operation,) if operation else ("rent", "sale")
     sources = ("FincaRaiz", "Metrocuadrado")
     db = SessionLocal()
     summary = {"scraped": 0, "upserted": 0, "scopes": []}
@@ -281,24 +482,35 @@ def refresh_property_inventory() -> dict:
         ensure_property_storage(db)
         for city in cities:
             for operation in operations:
-                query = {"city": city, "operation": operation, "sources": list(sources)}
                 started_at = datetime.utcnow()
-                raw_results = run_live_property_search(query)
-                normalized_results = _normalize_results_for_query(raw_results, query)
-                summary["scraped"] += len(raw_results)
                 seen_by_source = {source: set() for source in sources}
-                for item in normalized_results:
-                    try:
-                        upsert_property(db, item)
-                        db.commit()
-                        seen_by_source.setdefault(item["source"], set()).add(item["url"])
-                        summary["upserted"] += 1
-                    except Exception as exc:
-                        db.rollback()
-                        logger.exception("Could not persist property %s: %s", item.get("url"), exc)
+                scope_count = 0
+                for query in _inventory_queries(city, operation):
+                    raw_results = run_live_property_search(query)
+                    normalized_results = _normalize_results_for_query(raw_results, query)
+                    summary["scraped"] += len(raw_results)
+                    scope_count += len(normalized_results)
+                    for item in normalized_results:
+                        try:
+                            upsert_property(db, item)
+                            db.commit()
+                            seen_by_source.setdefault(item["source"], set()).add(item["url"])
+                            summary["upserted"] += 1
+                        except Exception as exc:
+                            db.rollback()
+                            logger.exception("Could not persist property %s: %s", item.get("url"), exc)
                 for source, seen_urls in seen_by_source.items():
-                    mark_missing_properties_inactive(db, city, source, operation, seen_urls, started_at)
-                summary["scopes"].append({"city": city, "operation": operation, "count": len(normalized_results)})
+                    if _should_mark_inactive(db, city, source, operation, seen_urls):
+                        mark_missing_properties_inactive(
+                            db,
+                            city,
+                            source,
+                            operation,
+                            seen_urls,
+                            started_at,
+                            missing_threshold=MISSING_INACTIVE_THRESHOLD,
+                        )
+                summary["scopes"].append({"city": city, "operation": operation, "count": scope_count})
                 db.commit()
         return summary
     except Exception:

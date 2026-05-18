@@ -1,5 +1,7 @@
 import json
+import os
 import re
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import scrapy
 
@@ -16,20 +18,22 @@ class FincaRaizSpider(scrapy.Spider):
     def __init__(self, query_json="{}", *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.query = json.loads(query_json)
+        self.max_pages = int(self.query.get("max_pages") or os.getenv("SCRAPER_MAX_PAGES", "40"))
+        self.seen_listing_urls: set[str] = set()
 
     def start_requests(self):
         url = build_fincaraiz_search_url(self.query)
-        yield scrapy.Request(url, callback=self.parse, dont_filter=True)
+        yield scrapy.Request(url, callback=self.parse, meta={"page": 1}, dont_filter=True)
 
     def parse(self, response):
-        yielded_urls = set()
+        page = int(response.meta.get("page") or 1)
         yielded_count = 0
 
         for item in _extract_next_data_items(response):
             listing = _serialize_next_data_item(item, response, self.query)
-            if not listing or listing["url"] in yielded_urls:
+            if not listing or listing["url"] in self.seen_listing_urls:
                 continue
-            yielded_urls.add(listing["url"])
+            self.seen_listing_urls.add(listing["url"])
             yielded_count += 1
             yield scrapy.Request(
                 listing["url"],
@@ -38,13 +42,11 @@ class FincaRaizSpider(scrapy.Spider):
                 meta={"listing": listing},
                 dont_filter=True,
             )
-            if yielded_count >= 12:
-                return
 
         for listing in _extract_visible_card_items(response, self.query):
-            if listing["url"] in yielded_urls:
+            if listing["url"] in self.seen_listing_urls:
                 continue
-            yielded_urls.add(listing["url"])
+            self.seen_listing_urls.add(listing["url"])
             yielded_count += 1
             yield scrapy.Request(
                 listing["url"],
@@ -53,8 +55,10 @@ class FincaRaizSpider(scrapy.Spider):
                 meta={"listing": listing},
                 dont_filter=True,
             )
-            if yielded_count >= 12:
-                return
+
+        if yielded_count > 0 and page < self.max_pages:
+            next_url = _next_page_url(response.url, page + 1)
+            yield scrapy.Request(next_url, callback=self.parse, meta={"page": page + 1}, dont_filter=True)
 
     def parse_detail(self, response):
         listing = response.meta["listing"]
@@ -256,3 +260,10 @@ def _extract_detail_data(response) -> dict:
 def _match_first(pattern: str, value: str) -> str | None:
     found = re.search(pattern, value)
     return found.group(1) if found else None
+
+
+def _next_page_url(url: str, page: int) -> str:
+    parts = urlsplit(url)
+    query = dict(parse_qsl(parts.query, keep_blank_values=True))
+    query["pagina"] = str(page)
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))

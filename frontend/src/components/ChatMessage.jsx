@@ -3,7 +3,7 @@ function Avatar({ role }) {
   return (
     <div
       className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
-        isUser ? "bg-slate-200 text-slate-900" : "bg-emerald-500 text-white"
+        isUser ? "bg-zinc-200 text-zinc-950" : "bg-white text-black"
       }`}
     >
       {isUser ? "Tú" : "IA"}
@@ -16,17 +16,17 @@ function ChatMessage({ role, content, subtle = false, children }) {
   const isTyping = !isUser && subtle && !content && !children;
 
   return (
-    <section className="px-3 py-4 sm:px-6 sm:py-5">
+    <section className="px-3 py-3 sm:px-6 sm:py-4">
       <div className={`mx-auto flex max-w-3xl items-start gap-2 sm:gap-4 ${isUser ? "justify-end" : "justify-start"}`}>
         {!isUser ? <Avatar role={role} /> : null}
         <div className={`min-w-0 flex-1 pt-1 ${isUser ? "flex justify-end" : ""}`}>
           <div
-            className={`rounded-[20px] border px-4 py-3 shadow-[0_10px_24px_rgba(0,0,0,0.14)] sm:rounded-[26px] sm:px-5 sm:py-4 ${
+            className={`px-4 py-3 sm:px-5 ${
               isUser
-                ? "ml-auto inline-block max-w-[92%] border-emerald-400/15 bg-emerald-500/10 text-left sm:max-w-[85%]"
+                ? "ml-auto inline-block max-w-[92%] rounded-3xl bg-[#2f2f2f] text-left sm:max-w-[78%]"
                 : subtle
-                  ? "inline-block max-w-full border-white/8 bg-[#40414f] sm:max-w-[85%]"
-                  : "inline-block max-w-full border-white/10 bg-[#444654] sm:max-w-[85%]"
+                  ? "inline-block max-w-full rounded-3xl bg-[#1b1b1b] sm:max-w-[85%]"
+                  : "inline-block max-w-full rounded-none bg-transparent sm:max-w-[85%]"
             }`}
           >
             {isTyping ? (
@@ -39,7 +39,7 @@ function ChatMessage({ role, content, subtle = false, children }) {
             {content ? (
               <p
                 className={`whitespace-pre-wrap text-sm leading-6 sm:text-[15px] sm:leading-7 ${
-                  subtle ? "text-slate-300" : "text-slate-100"
+                  subtle ? "text-zinc-300" : "text-zinc-100"
                 }`}
               >
                 {content}

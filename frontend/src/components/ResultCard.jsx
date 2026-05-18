@@ -18,8 +18,8 @@ function ResultCard({ property, compact = false, horizontal = false }) {
       ? "h-32 sm:h-36 md:h-full"
       : "h-40 sm:h-48";
   const cardClass = horizontal
-    ? "snap-start overflow-hidden rounded-[22px] border border-white/10 bg-[#171923] shadow-lg shadow-black/10"
-    : "overflow-hidden rounded-[22px] border border-white/10 bg-[#171923]/80 shadow-lg shadow-black/10";
+    ? "snap-start overflow-hidden rounded-[22px] border border-white/10 bg-[#181818] shadow-lg shadow-black/20"
+    : "overflow-hidden rounded-[22px] border border-white/10 bg-[#181818] shadow-lg shadow-black/20";
   const contentGridClass = horizontal
     ? "grid gap-3 p-3"
     : `grid gap-3 p-3 sm:gap-4 sm:p-4 ${compact ? "md:grid-cols-[132px_1fr]" : ""}`;
@@ -40,7 +40,7 @@ function ResultCard({ property, compact = false, horizontal = false }) {
           </div>
         ) : (
           <div
-            className={`${imageClass} flex w-full items-center justify-center rounded-[1rem] border border-dashed border-white/10 bg-white/[0.03] px-4 text-center text-xs leading-5 text-slate-500`}
+            className={`${imageClass} flex w-full items-center justify-center rounded-[1rem] border border-dashed border-white/10 bg-white/[0.03] px-4 text-center text-xs leading-5 text-zinc-500`}
           >
             Sin imagen disponible
           </div>
@@ -49,20 +49,20 @@ function ResultCard({ property, compact = false, horizontal = false }) {
           <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
             <div className="min-w-0">
               <h3 className="line-clamp-2 text-sm font-semibold leading-6 text-white sm:text-base">{property.title}</h3>
-              <p className="mt-1 line-clamp-1 text-xs text-slate-400 sm:text-sm">
+              <p className="mt-1 line-clamp-1 text-xs text-zinc-400 sm:text-sm">
                 {location} · {property.property_type || "Inmueble"}
               </p>
             </div>
-            <p className="w-fit rounded-full bg-emerald-500/15 px-3 py-1 text-sm font-semibold text-emerald-200 ring-1 ring-emerald-400/15">
+            <p className="w-fit rounded-full bg-white px-3 py-1 text-sm font-semibold text-black">
               {formatCurrency(property.price)}
             </p>
           </div>
 
-          <p className="mt-3 line-clamp-3 text-sm leading-6 text-slate-300">
+          <p className="mt-3 line-clamp-3 text-sm leading-6 text-zinc-300">
             {property.description || "Sin descripcion disponible en la fuente."}
           </p>
 
-          <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-300">
+          <div className="mt-3 flex flex-wrap gap-2 text-xs text-zinc-300">
             <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1">
               {property.bedrooms ?? "N/D"} hab
             </span>
@@ -75,9 +75,9 @@ function ResultCard({ property, compact = false, horizontal = false }) {
           </div>
 
           {visibleFeatures.length > 0 ? (
-            <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-300">
+            <div className="mt-3 flex flex-wrap gap-2 text-xs text-zinc-300">
               {visibleFeatures.map((feature) => (
-                <span key={feature} className="line-clamp-1 rounded-full border border-emerald-400/15 bg-emerald-400/5 px-2.5 py-1 text-emerald-100">
+                <span key={feature} className="line-clamp-1 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-zinc-200">
                   {feature}
                 </span>
               ))}
@@ -85,7 +85,7 @@ function ResultCard({ property, compact = false, horizontal = false }) {
           ) : null}
 
           <a
-            className="mt-4 inline-flex w-full justify-center rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 text-sm font-medium text-white transition hover:border-emerald-400/30 hover:bg-emerald-400/10 sm:w-auto"
+            className="mt-4 inline-flex w-full justify-center rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-medium text-white transition hover:bg-white/10 sm:w-auto"
             href={property.url}
             target="_blank"
             rel="noreferrer"

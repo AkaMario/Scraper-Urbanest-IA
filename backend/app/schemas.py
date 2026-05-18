@@ -23,8 +23,18 @@ class ParsedQuery(BaseModel):
     price_max: int | None = None
     bedrooms: int | None = None
     bathrooms: int | None = None
+    parking_spaces: int | None = None
     keywords: list[str] = Field(default_factory=list)
     sources: list[str] = Field(default_factory=list)
+    accepted_zones: list[str] = Field(default_factory=list)
+    nearby_zones_checked: list[str] = Field(default_factory=list)
+    location_match_scope: str | None = None
+    exact_result_count: int | None = None
+    fallback_reason: str | None = None
+    fallback_scope: str | None = None
+    nearby_offer_zones: list[str] = Field(default_factory=list)
+    allow_nearby_followup: bool = False
+    original_zone: str | None = None
 
 
 class PropertyOut(BaseModel):
@@ -51,6 +61,7 @@ class PropertyOut(BaseModel):
     image_urls: list[str] | None = Field(default_factory=list)
     raw_text: str | None = None
     status: str = "active"
+    missing_count: int = 0
     last_seen_at: datetime | None = None
     scraped_at: datetime
 

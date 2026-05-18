@@ -1,26 +1,23 @@
 function EmptyConversation({ prompts, onPromptClick, isTyping }) {
   return (
-    <section className={`px-3 py-10 sm:px-6 sm:py-14 lg:py-16 transition-opacity duration-300 ${isTyping ? "opacity-40" : "opacity-100"}`}>
-      <div className="mx-auto max-w-3xl">
-        <div className="mb-8 text-center sm:mb-10">
-          <p className="text-[11px] uppercase tracking-[0.28em] text-slate-500 sm:text-xs sm:tracking-[0.35em]">
-            Urbanest IA
-          </p>
-          <h3 className="mt-4 text-3xl font-semibold leading-tight text-white sm:text-4xl">
-            ¿Qué arriendo quieres rastrear?
+    <section className={`flex min-h-[calc(100vh-220px)] items-center px-4 py-10 transition-opacity duration-300 sm:px-6 ${isTyping ? "opacity-40" : "opacity-100"}`}>
+      <div className="mx-auto w-full max-w-4xl">
+        <div className="mb-8 text-center">
+          <h3 className="text-2xl font-semibold leading-tight text-zinc-100 sm:text-3xl md:text-4xl">
+            ¿En qué estás trabajando?
           </h3>
-          <p className="mx-auto mt-4 max-w-2xl text-sm leading-6 text-slate-400 sm:text-base sm:leading-7">
-            Pide zonas, presupuesto, tipo de inmueble, habitaciones, baños o keywords y te devuelvo mercado comparado.
+          <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-zinc-500 sm:text-base">
+            Busca inmuebles en Cartagena o Barranquilla, compara precios y pregúntame por oportunidades usando la base de datos local.
           </p>
         </div>
 
-        <div className="grid gap-3 md:grid-cols-3">
+        <div className="mx-auto flex max-w-2xl flex-wrap justify-center gap-2.5">
           {prompts.map((prompt) => (
             <button
               key={prompt}
               type="button"
               onClick={() => onPromptClick(prompt)}
-              className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-left text-sm leading-6 text-slate-200 transition hover:bg-white/[0.08] md:min-h-[144px]"
+              className="rounded-full border border-white/10 bg-black px-4 py-2.5 text-sm leading-5 text-zinc-300 transition hover:border-white/20 hover:bg-[#1f1f1f] hover:text-white"
             >
               {prompt}
             </button>

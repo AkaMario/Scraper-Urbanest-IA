@@ -230,7 +230,8 @@ def _run_spider(spider_name: str, query: dict) -> list[dict]:
     env["PYTHONPATH"] = f"{PROJECT_ROOT}:{PROJECT_ROOT / 'backend'}:{env.get('PYTHONPATH', '')}"
 
     try:
-        spider_timeout = {"fincaraiz": 60, "metrocuadrado": 45}.get(spider_name, 30)
+        max_pages = int(query.get("max_pages") or os.getenv("SCRAPER_MAX_PAGES", "40"))
+        spider_timeout = {"fincaraiz": 60 + max_pages * 10, "metrocuadrado": 60 + max_pages * 8}.get(spider_name, 120)
         subprocess.run(
             [
                 "scrapy",

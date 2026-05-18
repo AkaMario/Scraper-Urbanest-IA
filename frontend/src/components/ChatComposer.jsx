@@ -30,28 +30,44 @@ function ChatComposer({ onSend, onTyping, loading }) {
   };
 
   return (
-    <div className="sticky bottom-0 border-t border-white/5 bg-gradient-to-t from-[#343541] via-[#343541] to-[#343541]/60 px-3 pb-4 pt-3 sm:px-6 sm:pb-6 sm:pt-4">
+    <div className="sticky bottom-0 bg-gradient-to-t from-black via-black to-black/0 px-3 pb-4 pt-5 sm:px-6 sm:pb-6">
       <form onSubmit={handleSubmit} className="mx-auto max-w-3xl">
-        <div className="rounded-[22px] border border-white/10 bg-[#40414f] p-2.5 sm:rounded-[30px] sm:p-3">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3 items-center">
+        <div className="rounded-[28px] border border-white/10 bg-[#2f2f2f] p-2 shadow-[0_18px_60px_rgba(0,0,0,0.45)] transition focus-within:border-white/20 sm:rounded-[32px]">
+          <div className="flex items-end gap-2">
+            <button
+              type="button"
+              className="mb-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-zinc-300 transition hover:bg-white/10 hover:text-white"
+              aria-label="Agregar contexto"
+            >
+              <svg aria-hidden="true" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14M5 12h14" />
+              </svg>
+            </button>
             <textarea
-              className="flex-1 bg-transparent px-3 pt-4 text-sm text-white outline-none placeholder:text-slate-400 sm:text-[15px] resize-none h-10 sm:h-12 max-h-40"
+              className="max-h-40 min-h-[44px] flex-1 resize-none bg-transparent px-1 py-3 text-[15px] leading-6 text-white outline-none placeholder:text-zinc-400"
               value={input}
               onChange={(event) => updateTyping(event.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Escribe una nueva búsqueda o pregunta sobre las opciones actuales..."
+              placeholder="Pregunta por zonas, precios o propiedades guardadas..."
             />
             <button
               type="submit"
-              disabled={loading}
-              className="w-full rounded-2xl bg-emerald-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-slate-600 sm:w-auto"
+              disabled={loading || !input.trim()}
+              className="mb-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:bg-zinc-600 disabled:text-zinc-300"
+              aria-label={loading ? "Buscando" : "Enviar"}
             >
-              {loading ? "Buscando" : "Enviar"}
+              {loading ? (
+                <span className="h-3 w-3 animate-pulse rounded-full bg-current" />
+              ) : (
+                <svg aria-hidden="true" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 19V5m0 0-6 6m6-6 6 6" />
+                </svg>
+              )}
             </button>
           </div>
         </div>
-        <p className={`mt-2 px-2 text-center text-[11px] leading-5 text-slate-500 sm:mt-3 sm:text-xs transition-opacity duration-300 ${input.trim() ? "opacity-0" : "opacity-100"}`}>
-          Urbanest IA usa scraping responsable y muestra solo anuncios reales cuando una fuente responde.
+        <p className={`mt-2 px-2 text-center text-xs leading-5 text-zinc-600 transition-opacity duration-300 ${input.trim() ? "opacity-0" : "opacity-100"}`}>
+          Urbanest IA puede equivocarse. Verifica datos importantes antes de contactar una propiedad.
         </p>
       </form>
     </div>

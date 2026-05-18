@@ -423,29 +423,22 @@ function App() {
           onDeleteConversation={handleDeleteConversation}
           onNewConversation={handleNewConversation}
           onClearHistory={handleClearConversations}
+          onOpenAdmin={() => setView("admin")}
           loading={loading}
         />
       }
       main={
-        <div className="flex min-h-screen flex-col bg-[#343541]">
+        <div className="flex min-h-screen flex-col bg-black">
           <ConversationHeader
             loading={loading}
             jobId={jobId}
             resultCount={results.length}
           />
-          <button
-            type="button"
-            onClick={() => setView("admin")}
-            className="fixed right-4 top-4 z-20 rounded-xl border border-white/10 bg-[#202123]/90 px-3 py-2 text-xs font-medium text-slate-200 shadow-lg shadow-black/20 hover:bg-white/10"
-          >
-            Admin inmuebles
-          </button>
-
           <div
             ref={conversationRef}
             className="flex-1 overflow-y-auto"
           >
-            <div className="mx-auto flex w-full max-w-3xl flex-col">
+            <div className="mx-auto flex w-full max-w-5xl flex-col">
 {messages.length === 0 && !loading ? (
             <EmptyConversation
               prompts={SUGGESTED_PROMPTS}
