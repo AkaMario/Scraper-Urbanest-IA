@@ -205,6 +205,17 @@ def search_saved_properties_with_meta(db, parsed_query: dict, user_message: str,
             meta["fallback_scope"] = "exact"
             return rows, meta
 
+        rows = _semantic_property_search(db, parsed_query, embedding, strict=False, require_location=True, limit=limit)
+        if rows:
+            meta["fallback_reason"] = "no_exact_match"
+            meta["fallback_scope"] = "location_relaxed_filters"
+            return rows, meta
+
+        if parsed_query.get("location_match_scope") == "nearby":
+            meta["fallback_reason"] = "no_exact_match"
+            meta["fallback_scope"] = "nearby_only"
+            return [], meta
+
         similar_query = _price_window_query(parsed_query)
         rows = _semantic_property_search(db, similar_query, embedding, strict=True, require_location=False, limit=limit)
         if rows:

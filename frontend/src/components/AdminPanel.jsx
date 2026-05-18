@@ -6,12 +6,15 @@ const COP = new Intl.NumberFormat("es-CO", {
   maximumFractionDigits: 0,
 });
 
+const PAGE_SIZE = 20;
+
 function AdminPanel({ apiUrl, onBack }) {
   const [properties, setProperties] = useState([]);
   const [stats, setStats] = useState([]);
   const [filters, setFilters] = useState({ city: "", status: "active", operation: "" });
   const [searchTerm, setSearchTerm] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -20,7 +23,6 @@ function AdminPanel({ apiUrl, onBack }) {
     Object.entries(filters).forEach(([key, value]) => {
       if (value) params.set(key, value);
     });
-    params.set("limit", "200");
     setLoading(true);
     Promise.all([
       fetch(`${apiUrl}/api/properties?${params.toString()}`, { signal: controller.signal }).then((res) => res.json()),
@@ -37,6 +39,7 @@ function AdminPanel({ apiUrl, onBack }) {
 
   const updateFilter = (event) => {
     setFilters((current) => ({ ...current, [event.target.name]: event.target.value }));
+    setPage(1);
   };
 
   const normalizedSearch = searchTerm.trim().toLowerCase();
@@ -60,6 +63,14 @@ function AdminPanel({ apiUrl, onBack }) {
         return haystack.includes(normalizedSearch);
       })
     : properties;
+  const totalPages = Math.max(1, Math.ceil(visibleProperties.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const paginatedProperties = visibleProperties.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+
+  const updateSearchTerm = (value) => {
+    setSearchTerm(value);
+    setPage(1);
+  };
 
   return (
     <div className="min-h-screen bg-black px-4 py-4 text-zinc-100 sm:px-6 lg:px-8">
@@ -100,7 +111,7 @@ function AdminPanel({ apiUrl, onBack }) {
             <input
               className="w-full rounded-full border border-white/10 bg-black px-4 py-3 text-sm text-white outline-none placeholder:text-zinc-500 transition focus:border-white/25"
               value={searchTerm}
-              onChange={(event) => setSearchTerm(event.target.value)}
+              onChange={(event) => updateSearchTerm(event.target.value)}
               placeholder="Buscar por barrio, título, fuente, precio..."
             />
           </div>
@@ -140,7 +151,7 @@ function AdminPanel({ apiUrl, onBack }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
-                {visibleProperties.map((property) => (
+                {paginatedProperties.map((property) => (
                   <tr key={property.id} className="transition hover:bg-white/[0.04]">
                     <td className="max-w-md px-4 py-3">
                       <a className="font-medium text-zinc-100 hover:text-white" href={property.url} target="_blank" rel="noreferrer">
@@ -168,6 +179,31 @@ function AdminPanel({ apiUrl, onBack }) {
               </div>
             ) : null}
           </div>
+          {visibleProperties.length > 0 ? (
+            <div className="flex flex-col gap-3 border-t border-white/10 px-4 py-4 text-sm text-zinc-400 sm:flex-row sm:items-center sm:justify-between">
+              <span>
+                Página {safePage} de {totalPages} · Mostrando {(safePage - 1) * PAGE_SIZE + 1}-{Math.min(safePage * PAGE_SIZE, visibleProperties.length)}
+              </span>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPage((current) => Math.max(1, current - 1))}
+                  disabled={safePage <= 1}
+                  className="rounded-full border border-white/10 bg-black px-4 py-2 text-sm text-zinc-300 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Anterior
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+                  disabled={safePage >= totalPages}
+                  className="rounded-full border border-white/10 bg-black px-4 py-2 text-sm text-zinc-300 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Siguiente
+                </button>
+              </div>
+            </div>
+          ) : null}
         </div>
       </div>
     </div>

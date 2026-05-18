@@ -180,10 +180,10 @@ function Sidebar({
       </div>
 
       <div className="mt-3 flex items-center gap-3 border-t border-white/[0.07] px-2 pb-1 pt-3">
-        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-700 text-xs font-semibold text-white">U</div>
+        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-700 text-xs font-semibold text-white">UGU</div>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm text-white">Urbanest</p>
-          <p className="text-xs text-zinc-500">IA inmobiliaria</p>
+          <p className="truncate text-sm text-white">Urbanest guest user</p>
+          <p className="text-xs text-zinc-500">IA inmobiliaria prueba</p>
         </div>
       </div>
     </div>

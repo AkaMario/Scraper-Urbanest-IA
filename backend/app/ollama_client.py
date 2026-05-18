@@ -338,7 +338,8 @@ def build_search_reply(
     safe_properties = properties or []
     requested_zone = safe_query.get("zone") or safe_query.get("neighborhood")
     city_scope = safe_query.get("city") or "Cartagena"
-    zone = requested_zone or f"distintas zonas de {city_scope}"
+    original_zone = safe_query.get("original_zone") or requested_zone
+    zone = requested_zone or original_zone or f"distintas zonas de {city_scope}"
     accepted_zones = safe_query.get("accepted_zones") or []
     nearby_zones_checked = safe_query.get("nearby_zones_checked") or []
     property_type = safe_query.get("property_type") or "inmuebles"
@@ -357,7 +358,11 @@ def build_search_reply(
             message = f"No encontré resultados exactos para {original_zone} con esos filtros. "
         if total:
             scope = safe_query.get("fallback_scope") or "similar"
-            if scope == "city_same_type_similar_price":
+            if scope == "location_relaxed_filters" and safe_query.get("location_match_scope") == "nearby":
+                message += f"Encontré {total} opción(es) en barrios cercanos, pero relajando precio o tipo de inmueble. "
+            elif scope == "location_relaxed_filters":
+                message += f"Encontré {total} opción(es) en {original_zone}, pero relajando precio o tipo de inmueble. "
+            elif scope == "city_same_type_similar_price":
                 message += f"Encontré {total} opción(es) similares en {city_scope}, del mismo tipo y con precio parecido. "
             elif scope == "city_similar_price":
                 message += f"Encontré {total} opción(es) similares en {city_scope}, con precio parecido. "
@@ -390,7 +395,7 @@ def build_search_reply(
             safe_query.get(key)
             for key in ("zone", "neighborhood", "price_min", "price_max", "bedrooms", "bathrooms")
         )
-        if requested_zone and nearby_zones_checked:
+        if (requested_zone or original_zone) and nearby_zones_checked:
             return (
                 f"No encontré opciones de {property_type} que encajen con los criterios actuales en {zone} "
                 f"ni en barrios cercanos revisados: {', '.join(str(item) for item in nearby_zones_checked)}. "

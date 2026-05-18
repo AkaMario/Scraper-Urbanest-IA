@@ -50,7 +50,7 @@ function ChatResultsBlock({ parsedQuery, analysis, results, onPromptClick }) {
       <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-3 sm:rounded-[24px] sm:p-4">
         <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm font-medium text-zinc-200">Preguntas sugeridas</p>
-          <p className="text-xs text-zinc-500">Toca una para comparar el lote</p>
+          {/* <p className="text-xs text-zinc-500">Toca una para comparar el lote</p> */}
         </div>
         <div className="mt-3 flex gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0">
           {[

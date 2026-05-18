@@ -1,7 +1,17 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 function ChatComposer({ onSend, onTyping, loading }) {
   const [input, setInput] = useState("");
+  const textareaRef = useRef(null);
+
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) {
+      return;
+    }
+    textarea.style.height = "24px";
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 176)}px`;
+  }, [input]);
 
   const updateTyping = (value) => {
     setInput(value);
@@ -32,11 +42,11 @@ function ChatComposer({ onSend, onTyping, loading }) {
   return (
     <div className="sticky bottom-0 bg-gradient-to-t from-black via-black to-black/0 px-3 pb-4 pt-5 sm:px-6 sm:pb-6">
       <form onSubmit={handleSubmit} className="mx-auto max-w-3xl">
-        <div className="rounded-[28px] border border-white/10 bg-[#2f2f2f] p-2 shadow-[0_18px_60px_rgba(0,0,0,0.45)] transition focus-within:border-white/20 sm:rounded-[32px]">
-          <div className="flex items-end gap-2">
+        <div className="rounded-[28px] border border-white/10 bg-[#2f2f2f] px-2 py-2 shadow-[0_18px_60px_rgba(0,0,0,0.45)] transition focus-within:border-white/20 sm:rounded-[32px]">
+          <div className="flex min-h-[44px] items-center gap-2">
             <button
               type="button"
-              className="mb-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-zinc-300 transition hover:bg-white/10 hover:text-white"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-zinc-300 transition hover:bg-white/10 hover:text-white"
               aria-label="Agregar contexto"
             >
               <svg aria-hidden="true" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8">
@@ -44,7 +54,9 @@ function ChatComposer({ onSend, onTyping, loading }) {
               </svg>
             </button>
             <textarea
-              className="max-h-40 min-h-[44px] flex-1 resize-none bg-transparent px-1 py-3 text-[15px] leading-6 text-white outline-none placeholder:text-zinc-400"
+              ref={textareaRef}
+              rows={1}
+              className="max-h-44 min-h-6 flex-1 resize-none overflow-y-auto bg-transparent px-1 py-0 text-[15px] leading-6 text-white outline-none placeholder:text-zinc-400"
               value={input}
               onChange={(event) => updateTyping(event.target.value)}
               onKeyDown={handleKeyDown}
@@ -53,7 +65,7 @@ function ChatComposer({ onSend, onTyping, loading }) {
             <button
               type="submit"
               disabled={loading || !input.trim()}
-              className="mb-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:bg-zinc-600 disabled:text-zinc-300"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:bg-zinc-600 disabled:text-zinc-300"
               aria-label={loading ? "Buscando" : "Enviar"}
             >
               {loading ? (

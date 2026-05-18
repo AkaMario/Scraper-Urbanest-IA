@@ -16,7 +16,7 @@ def list_properties(
     status: str | None = None,
     operation: str | None = None,
     source: str | None = None,
-    limit: int = Query(default=100, ge=1, le=500),
+    limit: int | None = Query(default=None, ge=1),
     db: Session = Depends(get_db),
 ):
     stmt = select(Property)
@@ -28,7 +28,9 @@ def list_properties(
         stmt = stmt.where(Property.operation == operation)
     if source:
         stmt = stmt.where(Property.source.ilike(f"%{source}%"))
-    stmt = stmt.order_by(Property.last_seen_at.desc()).limit(limit)
+    stmt = stmt.order_by(Property.last_seen_at.desc())
+    if limit is not None:
+        stmt = stmt.limit(limit)
     return list(db.execute(stmt).scalars().all())
 
 

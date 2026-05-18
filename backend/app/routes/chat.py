@@ -163,6 +163,105 @@ def _is_unhelpful_refusal(reply: str) -> bool:
     return any(fragment in lowered for fragment in refusal_fragments)
 
 
+def _format_cop(value: int | float | None) -> str:
+    if value is None:
+        return "precio sin dato"
+    return f"${int(value):,}".replace(",", ".")
+
+
+def _property_label(item: dict) -> str:
+    return item.get("title") or item.get("neighborhood") or item.get("zone") or "Inmueble"
+
+
+def _property_zone(item: dict) -> str:
+    return item.get("neighborhood") or item.get("zone") or item.get("city") or "zona sin dato"
+
+
+def _build_context_property_answer(message: str, properties: list[dict], analysis: dict | None = None) -> str | None:
+    if not properties:
+        return None
+    normalized = _normalize_intent_text(message)
+
+    if any(term in normalized for term in ("mas barata", "menor precio", "economica", "economico")):
+        with_price = [item for item in properties if item.get("price") is not None]
+        if not with_price:
+            return "Las propiedades en contexto no tienen precio suficiente para decir cual es la mas barata."
+        cheapest = min(with_price, key=lambda item: item.get("price") or 10**18)
+        return (
+            f"La opcion mas barata es {_property_label(cheapest)}, en {_property_zone(cheapest)}, "
+            f"con precio de {_format_cop(cheapest.get('price'))}."
+        )
+
+    opportunity_terms = ("mejor oportunidad", "mejor opcion", "cual conviene", "cual recomiendas", "recomiendame")
+    if any(term in normalized for term in opportunity_terms):
+        def score(item: dict) -> tuple[float, int]:
+            price = item.get("price") or 0
+            area = item.get("area_m2") or 0
+            if price and area:
+                return (float(price) / float(area), int(price))
+            return (float(price or 10**18), int(price or 10**18))
+
+        best = min(properties, key=score)
+        reasons = [f"esta en {_property_zone(best)}", f"cuesta {_format_cop(best.get('price'))}"]
+        if best.get("area_m2"):
+            reasons.append(f"tiene {best['area_m2']} m2")
+        if best.get("bedrooms"):
+            reasons.append(f"incluye {best['bedrooms']} habitacion(es)")
+        if best.get("parking_spaces"):
+            reasons.append("tiene parqueadero")
+        return (
+            f"De las opciones que te mostre, revisaria primero {_property_label(best)}: "
+            f"{', '.join(reasons)}. La elijo como mejor oportunidad por precio relativo frente al grupo disponible."
+        )
+
+    if "caracteristica" in normalized or "caracteristicas" in normalized:
+        summaries = []
+        for item in properties[:5]:
+            details = []
+            if item.get("bedrooms"):
+                details.append(f"{item['bedrooms']} hab")
+            if item.get("bathrooms"):
+                details.append(f"{item['bathrooms']} banos")
+            if item.get("parking_spaces"):
+                details.append("parqueadero")
+            if item.get("area_m2"):
+                details.append(f"{item['area_m2']} m2")
+            features = [str(feature) for feature in item.get("features") or []][:3]
+            details.extend(features)
+            summaries.append(f"{_property_label(item)}: {', '.join(details) if details else 'sin caracteristicas detalladas'}. ")
+        return "Estas son las caracteristicas principales: " + "".join(summaries).strip()
+
+    if "mejor descripcion" in normalized or "descripcion para visitar" in normalized or "para visitar" in normalized:
+        described = [item for item in properties if item.get("description")]
+        if not described:
+            return "No veo descripciones suficientes en estas propiedades para escoger una visita por ese criterio."
+        best_description = max(described, key=lambda item: len(str(item.get("description") or "")))
+        description = str(best_description.get("description") or "")[:260]
+        return (
+            f"La que tiene mejor descripcion para decidir una visita es {_property_label(best_description)}, "
+            f"en {_property_zone(best_description)}. Su descripcion aporta mas contexto: {description}"
+        )
+
+    if "promedio" in normalized or "mercado" in normalized:
+        safe_analysis = analysis or {}
+        prices = [item.get("price") for item in properties if item.get("price") is not None]
+        if not prices:
+            return "No tengo precios suficientes en estas propiedades para calcular el promedio del mercado."
+        average = safe_analysis.get("average_price") or (sum(prices) / len(prices))
+        min_price = safe_analysis.get("min_price") or min(prices)
+        max_price = safe_analysis.get("max_price") or max(prices)
+        below_average = safe_analysis.get("below_average_count")
+        if below_average is None:
+            below_average = sum(1 for price in prices if price < average)
+        return (
+            f"Para este lote, el promedio esta cerca de {_format_cop(average)}. "
+            f"El rango va de {_format_cop(min_price)} a {_format_cop(max_price)}, "
+            f"y {below_average} propiedad(es) estan por debajo del promedio."
+        )
+
+    return None
+
+
 @router.post("/chat", response_model=ChatResponse)
 def chat(request: ChatRequest, db: Session = Depends(get_db)):
     properties_context = [item.model_dump() for item in request.properties]
@@ -195,6 +294,15 @@ def chat(request: ChatRequest, db: Session = Depends(get_db)):
     should_route_to_chat = not is_search_request(request.message)
 
     if should_route_to_chat:
+        context_answer = _build_context_property_answer(request.message, properties_context, analysis_context)
+        if context_answer:
+            return ChatResponse(
+                reply=context_answer,
+                parsed_query=request.parsed_query,
+                results=[],
+                job_id=None,
+            )
+
         concept_answer = build_real_estate_concept_answer(request.message)
         if concept_answer:
             return ChatResponse(
